@@ -24,7 +24,7 @@ permissions:
 env:
   # The commit of this repository whose sync-base.sh the check runs: a script fetched and run, so pinned, like the
   # actions. Move it when sync-base.sh changes. base.md itself is compared with master's (RAINEWORKS_BASE_REF).
-  SYNC_BASE_SHA: 71b11132d8ecd1dc804da2085b8860ed56824bc4
+  SYNC_BASE_SHA: d9297c7a55361a5c15bd1b9cf16d8410dadb515d
   # Raineworks' shared workflows, here in .github/workflows/, which every repository calls (release-note.yml is only for
   # repositories with releases, so it isn't asked for).
   SHARED_WORKFLOWS: check-base code-review docs-sync rules-audit
