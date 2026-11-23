@@ -79,7 +79,9 @@ What they need, set once per repository:
   `gh secret set DOCS_SYNC_APP_PRIVATE_KEY -R raine-works/<repo> < key.pem`.
 - **Anthropic workload identity federation**: Claude's steps exchange the job's GitHub OIDC token (`id-token: write`)
   for a short-lived Anthropic one, so there is no Anthropic secret. The federation rule, service account and workspace
-  are named in each workflow; the rule (Claude Console) has to accept every repository that calls these.
+  are named in each workflow; the rule (Claude Console) has to accept every repository that calls these. **Actions →
+  anthropic-wif-test** ([`anthropic-wif-test.yml`](.github/workflows/anthropic-wif-test.yml)) checks the exchange on
+  its own, from this repository.
 - **GitHub Actions may approve pull requests** (Settings → Actions → General), for Code review's `approve`:
   `scripts/apply-rulesets.sh` turns it on.
 
