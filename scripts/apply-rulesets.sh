@@ -4,7 +4,7 @@
 # - "Protect master" (rulesets/protect-master.json): no deleting or force-pushing the default branch; every change
 #   through a pull request, with one approval of its last push (stale approvals dismissed) and every review thread
 #   resolved. A repository with `codeOwnerReview` (this one) also needs its code owner's review (CODEOWNERS).
-# - "<repo> checks": Claude's review (repos.json `review`) and the repository's own checks (its `checks`) must pass,
+# - "<repo> checks": the shared workflows' checks (repos.json `review`) and the repository's own (its `checks`) pass,
 #   with the pull request up to date with the default branch.
 #
 # Both let the repository's admins bypass them, only to merge a pull request. It also lets GitHub Actions approve pull
@@ -67,7 +67,8 @@ for repo in "${repos[@]}"; do
 		'(.rules[] | select(.type == "pull_request") | .parameters.require_code_owner_review) = $code_owner' \
 		rulesets/protect-master.json)"
 
-	checks="$(jq -c --arg repo "$repo" '[.review[], .repos[$repo].checks[]] | map({context: ., integration_id: 15368})' repos.json)"
+	# The shared workflows' checks (a repository's own `review` list, or everyone's), then the repository's own.
+	checks="$(jq -c --arg repo "$repo" '[(.repos[$repo].review // .review)[], .repos[$repo].checks[]] | map({context: ., integration_id: 15368})' repos.json)"
 	upsert "$repo" "$(jq -n --arg name "$repo checks" --argjson checks "$checks" '{
 		name: $name,
 		target: "branch",

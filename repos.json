@@ -1,20 +1,87 @@
 {
 	"owner": "raine-works",
-	"review": ["code-review / review"],
+	"review": [
+		"Base rules / check",
+		"Code review / review"
+	],
 	"repos": {
-		"agents": { "checks": ["actionlint"], "codeOwnerReview": true },
-		"raineworks": { "checks": ["plan / plan", "checks / Lint", "checks / Typecheck", "checks / Test"] },
-		"ha-dashboards": {
-			"checks": ["Dashboards (lint, types, tests)", "Integration (ruff, pytest)", "hacs", "hassfest"]
+		"agents": {
+			"review": [
+				"Code review / review"
+			],
+			"checks": [
+				"actionlint"
+			],
+			"codeOwnerReview": true
 		},
-		"ha-googletv": { "checks": ["Lint and unit tests", "Home Assistant tests", "hacs", "hassfest"] },
-		"ha-grok": { "checks": ["Lint and tests", "hacs", "hassfest"] },
-		"ha-music-assistant": { "checks": ["Lint and tests", "hacs", "hassfest"] },
-		"ha-everscent": { "checks": ["Home Assistant config-flow tests", "Lint and unit tests", "hacs", "hassfest"] },
-		"ha-warden": { "checks": ["Lint and tests", "hacs", "hassfest"] },
-		"ha-gitops": { "checks": ["Lint and tests", "hacs", "hassfest"] },
-		"sendspin-a1s-source": { "checks": [] },
-		".dotfiles": { "checks": ["smoke-check"] },
+		"raineworks": {
+			"checks": [
+				"plan / plan",
+				"checks / Lint",
+				"checks / Typecheck",
+				"checks / Test"
+			]
+		},
+		"ha-dashboards": {
+			"checks": [
+				"Dashboards (lint, types, tests)",
+				"Integration (ruff, pytest)",
+				"hacs",
+				"hassfest"
+			]
+		},
+		"ha-googletv": {
+			"checks": [
+				"Lint and unit tests",
+				"Home Assistant tests",
+				"hacs",
+				"hassfest"
+			]
+		},
+		"ha-grok": {
+			"checks": [
+				"Lint and tests",
+				"hacs",
+				"hassfest"
+			]
+		},
+		"ha-music-assistant": {
+			"checks": [
+				"Lint and tests",
+				"hacs",
+				"hassfest"
+			]
+		},
+		"ha-everscent": {
+			"checks": [
+				"Home Assistant config-flow tests",
+				"Lint and unit tests",
+				"hacs",
+				"hassfest"
+			]
+		},
+		"ha-warden": {
+			"checks": [
+				"Lint and tests",
+				"hacs",
+				"hassfest"
+			]
+		},
+		"ha-gitops": {
+			"checks": [
+				"Lint and tests",
+				"hacs",
+				"hassfest"
+			]
+		},
+		"sendspin-a1s-source": {
+			"checks": []
+		},
+		".dotfiles": {
+			"checks": [
+				"smoke-check"
+			]
+		},
 		"devcontainer-features": {
 			"checks": [
 				"validate",

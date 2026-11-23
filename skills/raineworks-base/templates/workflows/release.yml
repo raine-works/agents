@@ -1,0 +1,36 @@
+# Has Claude write a release's note, by hand (Actions → Release note → Run workflow). If the repository keeps its
+# notes in a folder (notes-dir), it's the next release's, opened as the pull request `Release note <version>`. If it
+# doesn't, it's written for a tag (the newest, or the one given) and put on that tag's GitHub release. The workflow
+# is Raineworks', in raine-works/agents (.github/workflows/release-note.yml): this file only calls it, and comes from the
+# raineworks-base skill's templates/workflows/release.yml. Change the workflow there, for every repository at once; here,
+# only its inputs (with:). The Base rules check moves the pin when the shared workflows change.
+name: Release note
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Without a notes folder, the tag whose release gets the note (the newest, if empty).
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release-note:
+    name: Release note
+    uses: raine-works/agents/.github/workflows/release-note.yml@AGENTS_SHA # raine-works/agents master
+    secrets: inherit
+    with:
+      # The project's name, as the note's readers know it.
+      name: APP_NAME
+      tag: ${{ inputs.tag }}
+      # The defaults below are raineworks'. A repository that keeps its notes elsewhere sets its own; one that
+      # keeps none needs none of them.
+      # notes-dir: packages/ui/src/release-notes
+      # version-command: bun packages/tools/src/release-cli.ts next
+      # check-command: bun packages/tools/src/release-cli.ts notes
+      # guide: Anything else Claude should know to write this repository's notes.

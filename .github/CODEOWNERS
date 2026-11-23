@@ -1,3 +1,3 @@
-# Changes here reach every raine-works repository (the shared rules and the review that approves pull requests):
-# its owner reviews every one, not only Claude.
+# Changes here reach every raine-works repository (the base rules, and the workflows that review and approve their
+# pull requests): the owner reviews each one, not only Claude.
 * @raine-works

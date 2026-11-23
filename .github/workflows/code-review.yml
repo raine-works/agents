@@ -1,38 +1,35 @@
-# Claude's code review, for every raine-works repository: a reusable workflow each one calls from its own
-# `.github/workflows/code-review.yml` (templates/code-review.yml). Claude reviews every pull request against the
-# repository's AGENTS.md (the shared rules at its top and the repository's own), leaving inline comments on what it
-# finds and one summary comment. Each push reviews what's new since its last review and follows up on its own findings,
-# resolving those that are fixed. Someone replying to one of its inline comments gets an answer in that thread.
+# Claude reviews every pull request against the repo's rules (AGENTS.md and the docs it points to),
+# leaving inline comments on what it finds and one summary comment. Each push reviews what's new since
+# its last review and follows up on its own findings, resolving those that are fixed. Someone replying
+# to one of its inline comments gets an answer in that thread; it never replies anywhere else.
 #
 # Then `approve`: when Claude's review of the pull request's latest commit is done and none of its findings is left
-# open, the pull request is approved, as github-actions[bot]: the one approval `master`'s ruleset requires. It's a
-# plain check of the review's own threads and summary, not something Claude decides or anything in the pull request can
-# ask for. A push dismisses it (the ruleset), and the next review gives it again.
+# open, the pull request is approved, as github-actions[bot]: the one approval master's ruleset asks for. It's a check
+# of the review's own summary and threads, not something Claude decides or anything in the pull request can ask for.
+# A push dismisses it (the ruleset), and the next review gives it again. It needs the repository's "Allow GitHub
+# Actions to create and approve pull requests" setting (scripts/apply-rulesets.sh turns it on).
 #
-# It signs in to Anthropic with the job's OIDC token (workload identity federation): no secret. Claude posts as
-# claude[bot]: the Claude GitHub App must be installed on the repository. Approving needs the repository's "Allow
-# GitHub Actions to create and approve pull requests" setting (scripts/apply-rulesets.sh turns it on).
+# Raineworks' shared code review, called by every raine-works repository's .github/workflows/code-review.yml (on its pull
+# requests and review comment replies; the raineworks-base skill's templates/workflows/code-review.yml), which grants it
+# contents: read, pull-requests: write, id-token: write and actions: read. It signs in to Anthropic with the job's
+# OIDC token (workload identity federation): no secret.
 name: Code review
 
 on:
   workflow_call:
     inputs:
-      caller:
-        description: The repository's own workflow file that calls this one. A pull request that changes it isn't reviewed.
-        type: string
-        default: .github/workflows/code-review.yml
-      allowed-bot:
-        description: The one app whose pull requests are reviewed like a person's (its slug). Never '*'.
-        type: string
-        default: raineworks-doc-sync
       focus:
-        description: What else to look for in this repository, as bullets, added to the review's list.
+        description: >-
+          What to look for in this repository, most important first, as a Markdown list: its security rules, the
+          bugs and rule breaks that matter most here. Without it, a general list.
         type: string
-        default: ''
-    outputs:
-      reviewed:
-        description: Whether Claude reviewed (false when the run had nothing to do).
-        value: ${{ jobs.review.outputs.reviewed }}
+        default: |
+          - broken security rules (the base rules' "Security", and the repository's own): secrets reaching logs, the
+            database or output, access checks missing, input not validated at the boundary;
+          - correctness bugs: wrong logic, missed cases, races, non-idempotent background work;
+          - the repository's own rules (AGENTS.md), where breaking them breaks something;
+          - missing tests for new behaviour, failure paths and security-sensitive code;
+          - docs the change makes wrong and doesn't update (AGENTS.md says which doc covers what).
 
 permissions:
   contents: read
@@ -40,11 +37,11 @@ permissions:
 jobs:
   review:
     name: review
-    # One run per pull request at a time. A push cancels the run in progress (the new one covers it); a reply waits
-    # for it, and a newer pending run replaces an older one. Every run works from the pull request's whole state, so a
-    # cancelled or replaced one loses nothing.
+    # One run per pull request at a time. A push cancels the run in progress (the new one covers it); a
+    # reply waits for it, and a newer pending run replaces an older one. Every run works from the pull
+    # request's whole state, so a cancelled or replaced one loses nothing.
     concurrency:
-      group: code-review-${{ github.repository }}-${{ github.event.pull_request.number }}
+      group: code-review-${{ github.event.pull_request.number }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     permissions:
       contents: read
@@ -52,21 +49,22 @@ jobs:
       id-token: write
       # Lets it read CI results (the action's github_ci tools).
       actions: read
-    # Not drafts, and not forks (they can't sign in), nor bots' own pull requests or comments, except the allowed
-    # apps' pull requests. Other comments must come from someone with a say in the repository (an owner, member or
-    # collaborator: not just anyone who can comment on a public one), reply to Claude's (the first step checks), and
-    # not mention @claude (claude.yml answers those).
+    # Not drafts, and not forks (they can't sign in), nor bots' own pull requests or comments, except the
+    # docs-sync app's pull requests (docs sync, the base rules' and workflows' syncs, release notes): they're
+    # reviewed, and approved, like a person's.
+    # Other comments must come from someone with a say in the repository (an owner, member or collaborator:
+    # not just anyone who can comment on a public one) and reply to Claude's, which the first step checks, and not
+    # mention @claude: the shared @claude workflow (claude.yml) answers those, so the two never both reply.
     if: >-
       !github.event.pull_request.draft &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.pull_request.user.type != 'Bot' ||
-        github.event.pull_request.user.login == format('{0}[bot]', inputs.allowed-bot)) &&
+        github.event.pull_request.user.login == 'raineworks-doc-sync[bot]') &&
       (github.event_name == 'pull_request' ||
-        (github.event.comment.in_reply_to_id &&
+        (github.event.comment.in_reply_to_id && !contains(github.event.comment.body, '@claude') &&
           github.event.comment.user.type != 'Bot' &&
-          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
-          !contains(github.event.comment.body, '@claude')))
-    runs-on: ubuntu-latest
+          contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)))
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     outputs:
       reviewed: ${{ steps.ready.outputs.run == 'true' }}
@@ -95,33 +93,34 @@ jobs:
           ref: refs/pull/${{ github.event.pull_request.number }}/head
           fetch-depth: 0
           # The action fetches the pull request's head itself, which a private repository answers only with the
-          # checkout's credentials. The checkout keeps them outside the repository, in the runner's temp folder, which
-          # Claude may not read (--disallowedTools).
+          # checkout's credentials (without them it fails: "could not read Username"). The checkout keeps them
+          # outside the repository, in the runner's temp folder, which Claude may not read (--disallowedTools).
           persist-credentials: true
 
-      # The action refuses to run a review workflow that differs from the default branch's, so Claude can't review a
-      # pull request that changes this file (it runs once merged). The job fails rather than passing unreviewed: a
-      # person has to review such a pull request.
+      # The action refuses to run a review workflow that differs from the default branch's, so Claude can't
+      # review a pull request that changes this file (it runs once merged). The job fails rather than passing
+      # unreviewed: "Code review" is a required check, so a person has to review such a pull request, and an
+      # admin merge it past the failed check.
       - id: ready
         if: steps.trigger.outputs.run == 'true'
         name: Check this workflow matches the default branch's
         env:
           DEFAULT: origin/${{ github.event.repository.default_branch }}
-          CALLER: ${{ inputs.caller }}
         run: |
-          if git diff --quiet "$DEFAULT" HEAD -- "$CALLER"; then
+          if git diff --quiet "$DEFAULT" HEAD -- .github/workflows/code-review.yml; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "::error title=Code review needs a person::This pull request changes the review workflow, which Claude runs only once it's on $DEFAULT. A person has to review it: this check stays failed."
             exit 1
           fi
 
-      # What Claude may post, as commands of its own rather than `gh`: an allowed command matches only by its prefix, so
-      # allowing `gh api graphql` would allow any query or mutation the token can make (approving a pull request, say),
-      # `gh api <path>` any path after it, and `gh pr comment` any option (`--repo`, `--body-file` reading a file
-      # outside the checkout). These run only the reviewThreads query, for this pull request; resolveReviewThread, on
-      # one of its threads that Claude started; a reply in one of those threads; and a comment on this pull request,
-      # with the body given. Written here, not in the repository: the pull request's own copy would be what runs.
+      # What Claude may post, as commands of its own rather than `gh`: an allowed command matches only by its
+      # prefix, so allowing `gh api graphql` would allow any query or mutation the token can make (approving a pull
+      # request, say), `gh api <path>` any path after it (`…/comments/../../reviews`), and `gh pr comment` any
+      # option (`--repo`, `--body-file` reading a file outside the checkout). These run only the reviewThreads
+      # query, for this pull request; resolveReviewThread, on one of its threads that Claude started; a reply in
+      # one of those threads; and a comment on this pull request, with the body given. Written here, not in the
+      # repository: the pull request's own copy would be what runs.
       - id: tools
         if: steps.ready.outputs.run == 'true'
         name: Write Claude's review-thread commands
@@ -182,14 +181,14 @@ jobs:
         uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
         with:
           # Workload identity federation: the job's GitHub OIDC token (id-token: write) is exchanged for a
-          # short-lived Anthropic one, so no API key is stored. These are identifiers, not secrets.
+          # short-lived Anthropic one. These are identifiers, not secrets.
           anthropic_federation_rule_id: fdrl_015cLigViCEJyWAtahH5ytSC
           anthropic_organization_id: 34318a61-fac0-4077-a795-808d80efef19
           anthropic_service_account_id: svac_015F3BEwDj2EJr7bHDgKmFkL
           anthropic_workspace_id: wrkspc_01G5WKL4tLYspnSa4BYdzUCS
-          # The allowed app's pull requests are reviewed too (the job's `if`), but the action refuses any run a bot
+          # The docs-sync app's pull requests are reviewed too (the job's `if`), but the action refuses any run a bot
           # started unless it's named here. Only that app: never '*', which would let any app start a review.
-          allowed_bots: ${{ inputs.allowed-bot }}
+          allowed_bots: raineworks-doc-sync
           # A progress comment for each push, not for each reply.
           track_progress: ${{ github.event_name == 'pull_request' }}
           prompt: |
@@ -242,20 +241,11 @@ jobs:
             `git show`, `git blame`, `git ls-files`, `git merge-base`, `git rev-parse`, without options that
             write files or run programs, such as `--output`).
 
-            Read AGENTS.md first: the shared Raineworks rules at its top, then this repository's own (CLAUDE.md,
-            where there is one, is a link to it). Their rules take precedence over general best practice, and the
-            docs they list say how each area works. Read the docs and READMEs for the areas the change touches.
+            Read AGENTS.md first, with the base rules it imports (.raineworks/base.md), and any AGENTS.md nearer the
+            files the change touches: their rules take precedence over general best practice, and the docs they
+            list say how each area works. Read the docs for the areas the change touches.
 
             Look for, most important first:
-            - broken security rules: secrets, keys or personal details committed or logged; input from outside
-              (users, the network, files) trusted without validation; a workflow giving Claude, or code from a pull
-              request, a token, permission or tool it mustn't have; an action not pinned to a commit SHA;
-            - correctness bugs: wrong logic, missed cases, races, error paths that swallow failures;
-            - anything that breaks a rule in AGENTS.md (the shared rules or this repository's own);
-            - releases and versions made or changed by hand where CI makes them, or a version not bumped where the
-              repository's rules say it must be;
-            - missing tests for new behaviour, failure paths and security-sensitive code;
-            - docs the change makes wrong and doesn't update.
             ${{ inputs.focus }}
 
             Only report what you've checked against the code and are confident is a real problem; say
@@ -266,15 +256,15 @@ jobs:
             ## 4. Summarise
 
             Only if you reviewed new commits in step 3, leave one short summary comment with
-            `${{ steps.tools.outputs.dir }}/comment '<summary>'` (the summary as one quoted argument): new findings by
-            severity, earlier ones now resolved, and those still open (or that you found nothing), ending with
-            `Reviewed up to <full HEAD sha>`. Otherwise post no summary. Don't approve or request changes.
+            `${{ steps.tools.outputs.dir }}/comment '<summary>'` (the summary as one quoted argument): new findings by severity, earlier ones now resolved, and those still open (or
+            that you found nothing), ending with `Reviewed up to <full HEAD sha>`. Otherwise post no
+            summary. Don't approve or request changes.
           # No `Bash(git …:*)` rules: a rule matches by prefix whatever options follow, so `git diff:*` allows
           # `--output=<file>` (writing anywhere: over the commands above, say) and `git grep:*` `-O<program>` (running
-          # one). Without a rule, Claude Code's own read-only check runs git's read-only forms (diff, log, show, blame,
-          # ls-files, merge-base, rev-parse) and refuses those options. gh is pinned to this pull request. Nothing in
-          # the runner's temp folder may be read (a // rule is an absolute path): the checkout's credentials are there,
-          # and Claude only runs the commands above from it.
+          # one). Without a rule, Claude Code's own read-only check runs git's read-only forms (diff, log, show,
+          # blame, ls-files, merge-base, rev-parse) and refuses those options. gh is pinned to this pull request.
+          # Nothing in the runner's temp folder may be read (a // rule is an absolute path): the checkout's
+          # credentials are there, and Claude only runs the commands above from it.
           claude_args: |
             --model claude-opus-5-5
             --max-turns 250
@@ -300,8 +290,8 @@ jobs:
             echo "::error title=Claude's run failed::$(jq -r '[.[] | select(.type == "result")] | last | .subtype' "$LOG")"
             exit 1
           }
-          # A push's review isn't done until its summary says it reviewed this commit (a run can end "successfully"
-          # without getting there, e.g. out of turns): say so rather than pass.
+          # A push's review isn't done until its summary says it reviewed this commit (a run can end
+          # "successfully" without getting there, e.g. out of turns): say so rather than pass.
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             gh pr view "$PR" --json comments \
               --jq '[.comments[] | select(.author.login == "claude") | .body] | map(select(contains("Reviewed up to \(env.HEAD)"))) | length' \
@@ -319,7 +309,7 @@ jobs:
     name: approve
     needs: review
     if: needs.review.result == 'success' && needs.review.outputs.reviewed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read

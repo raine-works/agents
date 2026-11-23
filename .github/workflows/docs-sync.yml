@@ -1,49 +1,46 @@
-# Docs sync, for every raine-works repository: a reusable workflow each one calls from its own
-# `.github/workflows/docs-sync.yml` (templates/docs-sync.yml), after its CI passes on the default branch (or after a
-# push, where it has no CI). Claude checks whether what's new made any of the repository's docs wrong and, if so, opens
-# (or updates) one pull request fixing them. It never pushes to the default branch itself.
+# After master's checks pass, Claude checks whether what's new on master made any of the repo's docs wrong (the
+# ones AGENTS.md lists and the packages' READMEs) and, if so, opens (or updates) one pull request fixing them. It
+# never pushes to master itself.
 #
-# What's new is everything since the last commit it ran for: its previous successful run's. It skips its own merged
-# pull requests, release notes', the shared rules' syncs and generated READMEs'. An open docs-sync pull request's fixes
+# It follows CI (workflow_run), not the push: Claude's action doesn't take push events. What's new is
+# everything since the last commit it ran for: the previous successful run's. An open docs-sync pull request's fixes
 # are carried into each run, which adds to them: the pull request is rewritten from what the run leaves, so without
 # them a run that finds nothing new would close it and drop them.
 #
-# It signs in to Anthropic with the job's OIDC token (workload identity federation: no API key is stored), and opens
-# its pull request as the docs-sync GitHub App (the DOCS_SYNC_APP_CLIENT_ID variable and DOCS_SYNC_APP_PRIVATE_KEY
-# secret, the caller's): one opened with the workflow's own token would start no checks.
+# Raineworks' shared docs sync, called by every raine-works repository's .github/workflows/docs-sync.yml (after its CI, and by
+# hand; the raineworks-base skill's templates/workflows/docs-sync.yml), which grants it contents: write,
+# pull-requests: write, id-token: write and actions: read. It signs in to Anthropic with the job's OIDC token
+# (workload identity federation). Needs the docs-sync app (DOCS_SYNC_APP_CLIENT_ID, DOCS_SYNC_APP_PRIVATE_KEY), from
+# secrets: inherit or the organization.
 name: Docs sync
 
 on:
   workflow_call:
     inputs:
-      caller:
-        description: The repository's own workflow file that calls this one (its earlier runs say where the last sync stopped).
+      docs:
+        description: The repository's docs, as prose for Claude. Without it, a general list.
         type: string
-        default: docs-sync.yml
-      protected:
-        description: More paths Claude may never change, as Claude Code rules (e.g. 'Edit(/notes/**),Write(/notes/**)').
-        type: string
-        default: ''
-    secrets:
-      DOCS_SYNC_APP_PRIVATE_KEY:
-        required: true
+        default: >-
+          AGENTS.md and any AGENTS.md below it (rules), README.md and every package's or module's README.md,
+          STYLEGUIDE.md if there is one, and docs/*.md.
 
 permissions:
   contents: read
 
 jobs:
   sync:
-    name: Docs sync
+    name: sync
     concurrency:
-      group: docs-sync-${{ github.repository }}
+      group: docs-sync
       cancel-in-progress: false
     permissions:
       contents: write
       pull-requests: write
       id-token: write
       actions: read
-    # Only for a push to the default branch (whose CI passed, where it has CI), and not for its own merged pull
-    # requests, release notes, the shared rules' syncs or generated READMEs.
+    # Only for a push to master whose checks passed, and not for its own merged pull requests or releases.
+    # A repository without CI calls it on a push to master instead. Its own and the syncs' changes are skipped whether
+    # they were squashed (their subject) or merged (the branch in the merge's subject).
     if: >-
       github.event_name == 'workflow_dispatch' || ((
           (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
@@ -51,21 +48,27 @@ jobs:
           github.event_name == 'push'
         ) &&
         !startsWith(github.event.workflow_run.head_commit.message || github.event.head_commit.message, 'Sync docs') &&
-        !startsWith(github.event.workflow_run.head_commit.message || github.event.head_commit.message, 'Release note') &&
-        !startsWith(github.event.workflow_run.head_commit.message || github.event.head_commit.message, 'Sync agent rules') &&
-        !startsWith(github.event.workflow_run.head_commit.message || github.event.head_commit.message, 'Automated documentation update')
+        !startsWith(github.event.workflow_run.head_commit.message || github.event.head_commit.message, 'Release ') &&
+        !startsWith(github.event.workflow_run.head_commit.message || github.event.head_commit.message, 'Sync .raineworks/') &&
+        !startsWith(github.event.workflow_run.head_commit.message || github.event.head_commit.message, 'Move Raineworks') &&
+        !contains(github.event.workflow_run.head_commit.message || github.event.head_commit.message, '/claude/docs-sync') &&
+        !contains(github.event.workflow_run.head_commit.message || github.event.head_commit.message, '/raineworks/base-sync') &&
+        !contains(github.event.workflow_run.head_commit.message || github.event.head_commit.message, '/raineworks/workflows-sync') &&
+        !contains(github.event.workflow_run.head_commit.message || github.event.head_commit.message, '/release-note/')
       )
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
-      # Without the app there's nothing this run could finish: say so now, before Claude spends any time.
+      # Its pull request is opened as the docs-sync GitHub App, never with the workflow's own token: GitHub doesn't let
+      # that token open one here, and a pull request it opened would start no checks. So without the app there's
+      # nothing this run could finish: say so now, before Claude spends any time.
       - name: Check the docs-sync app is set up
         env:
           CLIENT_ID: ${{ vars.DOCS_SYNC_APP_CLIENT_ID }}
           HAS_KEY: ${{ secrets.DOCS_SYNC_APP_PRIVATE_KEY != '' }}
         run: |
           if [ -z "$CLIENT_ID" ] || [ "$HAS_KEY" != true ]; then
-            echo "::error::The docs-sync GitHub App isn't set up: set the DOCS_SYNC_APP_CLIENT_ID variable and the DOCS_SYNC_APP_PRIVATE_KEY secret, and install the app on this repository (raine-works/agents, README)."
+            echo "::error::The docs-sync GitHub App isn't set up: set the DOCS_SYNC_APP_CLIENT_ID variable and the DOCS_SYNC_APP_PRIVATE_KEY secret, and install the app on this repository (raine-works/agents' README, "Shared workflows")."
             exit 1
           fi
       # And installed on this repository: a token that can only read its metadata, to find out now rather than after
@@ -80,8 +83,8 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
-          # The pull request is opened (and pushed) with its own token, in its own step: the checkout's token isn't
-          # left in .git/config while Claude runs.
+          # The pull request is opened (and pushed) with its own token, in its own step: the checkout's
+          # contents: write token isn't left in .git/config while Claude runs.
           persist-credentials: false
       # The open pull request's fixes, staged on top of this commit (a closed one's never come back). Its commits name
       # where it began (a `Docs-Sync-Since:` trailer, written below): each run rebuilds it on its own commit, so its
@@ -116,12 +119,10 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           OPEN_SINCE: ${{ steps.open.outputs.since }}
           OPEN_BEGAN: ${{ steps.open.outputs.began }}
-          CALLER: ${{ inputs.caller }}
-          DEFAULT: ${{ github.event.repository.default_branch }}
         run: |
           # Where a dropped pull request began, else the commit this workflow last ran for (its previous successful
           # run), else just the latest commit.
-          since="${OPEN_SINCE:-$(gh run list --workflow "$CALLER" --branch "$DEFAULT" --status success --limit 1 --json headSha --jq '.[0].headSha // empty')}"
+          since="${OPEN_SINCE:-$(gh run list --workflow docs-sync.yml --branch master --status success --limit 1 --json headSha --jq '.[0].headSha // empty')}"
           if [ -z "$since" ] || ! git merge-base --is-ancestor "$since" "$HEAD_SHA"; then since="$HEAD_SHA~1"; fi
           # Where the pull request this run opens or updates began: the open one's start, else this range's.
           echo "began=$(git rev-parse "${OPEN_BEGAN:-$since}")" >> "$GITHUB_OUTPUT"
@@ -129,7 +130,7 @@ jobs:
       - uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
         with:
           # Workload identity federation: the job's GitHub OIDC token (id-token: write) is exchanged for a
-          # short-lived Anthropic one, so no API key is stored. These are identifiers, not secrets.
+          # short-lived Anthropic one. These are identifiers, not secrets.
           anthropic_federation_rule_id: fdrl_015cLigViCEJyWAtahH5ytSC
           anthropic_organization_id: 34318a61-fac0-4077-a795-808d80efef19
           anthropic_service_account_id: svac_015F3BEwDj2EJr7bHDgKmFkL
@@ -139,30 +140,29 @@ jobs:
             These commits are new on master: `git log ${{ steps.range.outputs.range }}`.
             Read their diffs (`git show`).
 
-            Check whether they made anything in the repository's docs wrong or incomplete: AGENTS.md (the shared
-            rules at its top are synced from raine-works/agents: never change them, only the repository's own rules
-            below), README.md, docs/ and the other READMEs. AGENTS.md says which doc covers what. Where a doc
-            disagrees with the code, the code is right.
+            Check whether they made anything in the repo's docs wrong or incomplete: ${{ inputs.docs }}
+            AGENTS.md says which doc covers what. Where a README disagrees with the code, the code is right.
+            Never touch .raineworks/ (Raineworks' base rules, a copy kept by its own sync).
 
             If something is now wrong or missing, fix it in place, in the voice of the doc around it. Each fact
             belongs in one doc: link rather than repeat. Don't restructure, reword what's still right, or write
-            about what didn't change. Don't touch release notes, changelogs or code.
+            about what didn't change. Don't touch release notes or code.
 
             The working tree may already hold fixes from the open docs-sync pull request (`git diff HEAD` shows
             them): keep them, unless these commits made one wrong.
 
             If nothing needs changing, change nothing.
-          # Claude edits only Markdown at the root, in docs/, and the READMEs below it (a leading / is the repository
-          # root), never .git, code, changelogs or the repository's `protected` paths. No `Bash(git …:*)` rules: a rule matches by prefix whatever
+          # Claude edits only Markdown at the root, in docs/ and the READMEs and AGENTS.md files below it (a leading / is
+          # the repository root), never .raineworks/, .git, code or release notes. No `Bash(git …:*)` rules: a rule matches by prefix whatever
           # options follow (`git diff --output=<file>` writes anywhere), and without one Claude Code's own read-only
           # check runs git log, show and diff and refuses those options.
           claude_args: |
             --model claude-opus-5-5
             --max-turns 80
-            --allowedTools "Read,Glob,Grep,Edit(/*.md),Write(/*.md),Edit(/docs/**),Write(/docs/**),Edit(/**/README.md),Write(/**/README.md)"
-            --disallowedTools "Edit(/CLAUDE.md),Write(/CLAUDE.md),Edit(/CHANGELOG.md),Write(/CHANGELOG.md)${{ inputs.protected && format(',{0}', inputs.protected) || '' }}"
-      # The pull request is opened (or pushed to) as the docs-sync GitHub App, its token made only now, so Claude's
-      # step never had it.
+            --allowedTools "Read,Glob,Grep,Edit(/*.md),Write(/*.md),Edit(/docs/**),Write(/docs/**),Edit(/**/README.md),Write(/**/README.md),Edit(/**/AGENTS.md),Write(/**/AGENTS.md)"
+            --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**)"
+      # The pull request is opened (or pushed to) as the docs-sync GitHub App (raine-works/agents' README, "Shared workflows"),
+      # its token made only now, so Claude's step never had it.
       - name: Use the docs-sync app
         id: app
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -177,18 +177,20 @@ jobs:
           token: ${{ steps.app.outputs.token }}
           branch: claude/docs-sync
           # Checked out on the commit CI passed, not a branch: the pull request is against master.
-          base: ${{ github.event.repository.default_branch }}
+          base: master
           delete-branch: true
           commit-message: |
-            Sync docs with ${{ github.event.repository.default_branch }}
+            Sync docs with master
 
             Docs-Sync-Since: ${{ steps.range.outputs.began }}
-          title: Sync docs with ${{ github.event.repository.default_branch }}
+          title: Sync docs with master
           body: |
             Claude found docs that `${{ steps.range.outputs.range }}` made wrong or incomplete, and fixed them.
 
             🤖 Generated with [Claude Code](https://claude.com/claude-code)
+          labels: documentation
           add-paths: |
             *.md
             docs/**
             **/README.md
+            **/AGENTS.md
