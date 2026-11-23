@@ -5,7 +5,12 @@
 # change, closed once an audit finds nothing. After CI it audits only when the push changed a rules file.
 #
 # Claude only reads: it writes its findings to one file, and a second job, which Claude never runs in, turns them into
-# the issue with a token that can write issues and nothing else. It signs in to Anthropic with the job's OIDC token
+# the issue with a token that can write issues and nothing else. Where the repository calls Issue to PR
+# (issue-to-pr.yml), that job then labels the issue `claude` as the docs-sync app, so Claude works the findings into a
+# pull request with nobody starting it: when the issue is opened, and again when its findings change while no pull
+# request of Issue to PR's is open for it. (The workflow's own token would start nothing: GitHub runs no workflow on its
+# events.) Needs the docs-sync app with Issues write (DOCS_SYNC_APP_CLIENT_ID, DOCS_SYNC_APP_PRIVATE_KEY); without it,
+# a warning, and the issue waits for someone to label it. It signs in to Anthropic with the job's OIDC token
 # (workload identity federation, which is what id-token: write is for): no secret.
 name: Rules audit
 
@@ -150,6 +155,7 @@ jobs:
       issues: write
     steps:
       - name: Open, update or close the issue
+        id: issue
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -178,10 +184,54 @@ jobs:
           } > body.md
           gh label create "$label" --color D93F0B --description "The rules audit found this repository breaking a rule" --force
           if [ -z "$issue" ]; then
-            gh issue create --title "Rules audit: $count rule(s) not followed" --label "$label" --body-file body.md
+            url=$(gh issue create --title "Rules audit: $count rule(s) not followed" --label "$label" --body-file body.md)
+            echo "number=${url##*/}" >> "$GITHUB_OUTPUT"
           elif [ "$(gh issue view "$issue" --json body --jq .body | tail -n +4)" != "$(tail -n +4 body.md)" ]; then
             gh issue edit "$issue" --title "Rules audit: $count rule(s) not followed" --body-file body.md
             gh issue comment "$issue" --body "The [audit]($RUN_URL) of $SHA found something different: the description is updated."
+            echo "number=$issue" >> "$GITHUB_OUTPUT"
           else
             echo "The same findings as issue #$issue already lists."
           fi
+      # Only for an issue opened or changed just now: the same findings again start nothing, so an issue Claude
+      # couldn't fix isn't worked over and over.
+      - name: Does the repository call Issue to PR
+        id: issue-to-pr
+        if: steps.issue.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ steps.issue.outputs.number }}
+        run: |
+          if ! gh api "repos/$GH_REPO/contents/.github/workflows/issue-to-pr.yml" --silent 2>/dev/null; then
+            echo "No issue-to-pr.yml here: the issue waits for a person."
+          elif [ -n "$(gh pr list --head "claude/issue-$NUMBER" --state open --json number --jq '.[].number')" ]; then
+            echo "Issue to PR's pull request for #$NUMBER is open already: its follow-up carries on."
+          else
+            echo "work=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Use the docs-sync app
+        id: app
+        if: steps.issue-to-pr.outputs.work == 'true'
+        # Without the app, or its Issues write permission, this fails: the next step warns, and the job still passes.
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.DOCS_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_SYNC_APP_PRIVATE_KEY }}
+          permission-issues: write
+      - name: Warn without the app
+        if: steps.app.outcome == 'failure'
+        run: echo "::warning::The docs-sync app can't write issues here (it needs the Issues write permission), so the rules audit's issue wasn't labelled claude for Issue to PR. Label it by hand."
+      # Removed first, so adding it is a `labeled` event even on an issue that has it: that's what starts Issue to PR.
+      - name: Hand the issue to Issue to PR
+        if: steps.app.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ steps.issue.outputs.number }}
+        run: |
+          gh label create claude --color 7C3AED --description "Claude works this issue into a pull request (Issue to PR)" --force
+          gh issue edit "$NUMBER" --remove-label claude >/dev/null 2>&1 || true
+          gh issue edit "$NUMBER" --add-label claude
+          echo "Labelled #$NUMBER claude: Issue to PR works it into a pull request."
