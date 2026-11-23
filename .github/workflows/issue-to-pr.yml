@@ -251,7 +251,7 @@ jobs:
         run: |
           [ -f "$LOG" ] || exit 0
           jq -r '.[] | select(.type == "result") | .permission_denials[]? |
-            "::warning title=Claude was refused a tool::\(.tool_name) \(.tool_input.command // .tool_input.file_path // "")"' "$LOG" | sort -u
+            "::warning title=Claude was refused a tool::\(.tool_name) \(.tool_input.command // .tool_input.file_path // "" | gsub("\\s*[\\r\\n]+\\s*"; " ⏎ "))"' "$LOG" | sort -u
       # Claude ends a run by opening the pull request, commenting or asking for a person, each of which leaves a
       # pull request or a marked comment. If it stopped with neither (commands refused, turns used up, the run
       # failing), the issue says so and waits for a person, instead of going quiet.
@@ -283,7 +283,7 @@ jobs:
           refused=""
           if [ -n "$LOG" ] && [ -f "$LOG" ]; then
             refused="$(jq -r '.[] | select(.type == "result") | .permission_denials[]? |
-              "- `\(.tool_name) \(.tool_input.command // .tool_input.file_path // "" | gsub("`"; "'"'"'") | .[:150])`"' "$LOG" \
+              "- `\(.tool_name) \(.tool_input.command // .tool_input.file_path // "" | gsub("\\s*[\\r\\n]+\\s*"; " ⏎ ") | gsub("`"; "'"'"'") | .[:150])`"' "$LOG" \
               | sort -u | head -n 15)"
           fi
           body="$why Nothing was opened for this issue. See [the run]($RUN_URL); mention @claude here to try again."
@@ -542,4 +542,4 @@ jobs:
         run: |
           [ -f "$LOG" ] || exit 0
           jq -r '.[] | select(.type == "result") | .permission_denials[]? |
-            "::warning title=Claude was refused a tool::\(.tool_name) \(.tool_input.command // .tool_input.file_path // "")"' "$LOG" | sort -u
+            "::warning title=Claude was refused a tool::\(.tool_name) \(.tool_input.command // .tool_input.file_path // "" | gsub("\\s*[\\r\\n]+\\s*"; " ⏎ "))"' "$LOG" | sort -u
