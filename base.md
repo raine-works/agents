@@ -148,7 +148,8 @@ Document as you go, in the same change as the code:
 - **What may be shared.** Never paste personal data, credentials or secrets into an AI tool, prompt or external
   service. An issue handed to an agent counts as shared with it.
 - **The owner owns the work.** Whoever starts an agent owns what it produces. Claude's review approves pull requests;
-  the owner merges them, and reads what matters before doing so.
+  the owner merges them (except the automation's own, which auto-merge once approved and green), and reads what
+  matters before doing so.
 - **Say when AI did the work.** Commits and pull requests made by an agent say so (e.g. a `Co-Authored-By` line).
 - **Provenance.** Don't bring in code an AI reproduced from a source whose licence is unclear.
 

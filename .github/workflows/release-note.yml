@@ -336,8 +336,6 @@ jobs:
 
             🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
-      # Without one: the note becomes the release's text, with the workflow's own token (nothing is pushed, so no
-      # app). A release the tag already has keeps its title and assets; only its text is replaced.
       # Merged by GitHub once it's approved and its checks pass, with nobody to wait for (a person's own pull requests
       # stay theirs to merge). Where the repository doesn't allow auto-merge, it waits for a person instead.
       - name: Merge it once it's approved and green
@@ -348,6 +346,8 @@ jobs:
         run: |
           gh pr merge --auto --merge "$PR_URL" \
             || echo "::warning::Auto-merge isn't allowed in this repository: $PR_URL waits for a person to merge it."
+      # Without one: the note becomes the release's text, with the workflow's own token (nothing is pushed, so no
+      # app). A release the tag already has keeps its title and assets; only its text is replaced.
       - name: Publish it on the release
         if: steps.where.outputs.where == 'release' && steps.check.outputs.written == 'true'
         env:
