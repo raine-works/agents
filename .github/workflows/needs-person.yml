@@ -1,0 +1,67 @@
+# What's waiting on a person, across every repository in repos.json: one issue here, labelled needs-person-list, kept
+# up to date daily (and by hand: Actions → Needs a person → Run workflow), closed when nothing is waiting.
+#
+# - Issues and pull requests labelled needs-person: Claude stopped there (Issue to PR's `ask-person`, or its rounds
+#   ran out) and said why on it.
+# - Pull requests that are approved but have no auto-merge requested: the owner's own, waiting to be merged.
+#
+# It only reads the other repositories (they're public, so the workflow's token can) and writes this one's issue.
+name: Needs a person
+
+on:
+  schedule:
+    - cron: '7 13 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  list:
+    name: list
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Collect, and update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          owner="$(jq -r .owner repos.json)"
+          label=needs-person-list
+          : > body.md
+          count=0
+          for repo in $(jq -r '.repos | keys[]' repos.json); do
+            items="$(
+              {
+                gh issue list -R "$owner/$repo" --label needs-person --state open --json number,title,url \
+                  --jq '.[] | "- Issue [\(.title)](\(.url)): needs a person"'
+                gh pr list -R "$owner/$repo" --label needs-person --state open --json number,title,url \
+                  --jq '.[] | "- Pull request [\(.title)](\(.url)): needs a person"'
+                gh pr list -R "$owner/$repo" --state open --json number,title,url,reviewDecision,autoMergeRequest,isDraft \
+                  --jq '.[] | select(.reviewDecision == "APPROVED" and .autoMergeRequest == null and (.isDraft | not))
+                    | "- Pull request [\(.title)](\(.url)): approved, waiting to be merged"'
+              } | sort -u
+            )"
+            if [ -n "$items" ]; then
+              count=$((count + $(wc -l <<<"$items")))
+              { echo "### $repo"; echo; echo "$items"; echo; } >> body.md
+            fi
+          done
+          issue="$(gh issue list --label "$label" --state open --limit 1 --json number --jq '.[0].number // empty')"
+          if [ "$count" -eq 0 ]; then
+            echo "Nothing is waiting on a person."
+            [ -z "$issue" ] || gh issue close "$issue" --comment "Nothing is waiting on a person: closing."
+            exit 0
+          fi
+          { echo "$count item(s) are waiting on a person across raine-works, as of $(date -u +%Y-%m-%d). Each says why on it."; echo; cat body.md; } > issue.md
+          gh label create "$label" --color FBCA04 --description "What's waiting on a person, across the repositories" --force
+          if [ -z "$issue" ]; then
+            gh issue create --title "Needs a person: $count item(s)" --label "$label" --body-file issue.md
+          else
+            gh issue edit "$issue" --title "Needs a person: $count item(s)" --body-file issue.md
+          fi
+          cat issue.md >> "$GITHUB_STEP_SUMMARY"
