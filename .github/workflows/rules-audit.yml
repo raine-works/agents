@@ -174,7 +174,11 @@ jobs:
           issue=$(gh issue list --label "$label" --state open --limit 1 --json number --jq '.[0].number // empty')
           if [ "$count" -eq 0 ]; then
             echo "Nothing found."
-            [ -z "$issue" ] || gh issue close "$issue" --comment "The [audit]($RUN_URL) of $SHA found nothing: closing."
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --comment "The [audit]($RUN_URL) of $SHA found nothing: closing."
+              # Nothing is left for a person either.
+              gh issue edit "$issue" --remove-label needs-person >/dev/null 2>&1 || true
+            fi
             exit 0
           fi
           {
