@@ -41,10 +41,11 @@ as reusable workflows, so every repository runs the same ones:
 | [`docs-sync.yml`](.github/workflows/docs-sync.yml) | **Docs sync**: after `master`'s CI (or a push, without CI), Claude fixes docs the new commits made wrong, in a pull request that later runs add to rather than replace (input `docs`) |
 | [`rules-audit.yml`](.github/workflows/rules-audit.yml) | **Rules audit**: weekly and when the rules change, Claude audits `master` and keeps a `rules-audit` issue open while something breaks them (inputs `rules`, `checklist`) |
 
-Two more are shared but not required:
+Three more are shared but not required:
 
 | Workflow | Does |
 | --- | --- |
+| [`issue-to-pr.yml`](.github/workflows/issue-to-pr.yml) | **Issue to PR**: an issue the owner opens (or any issue once it's labelled `claude`) is worked by Claude into a pull request, which Claude then sees through its checks and Code review's findings until it's approved, with nobody starting it; after five rounds it asks for a person (input `allowed-commands`: the repository's checks). Claude pushes only to its own `claude/issue-<n>` branch and never merges |
 | [`claude.yml`](.github/workflows/claude.yml) | **Claude**: mention `@claude` in an issue, a comment or a review and Claude answers there, or makes the change on a branch, as `claude[bot]` so its branches run the checks (input `allowed-commands`: the commands it may run, a Bun project's by default). Code review leaves replies that mention `@claude` to it |
 | [`release-note.yml`](.github/workflows/release-note.yml) | **Release note**: Claude writes a release's note from what changed since the last, when there's something the project's users would notice (otherwise none). In a repository that keeps its notes in a folder (`notes-dir`), it's the next release's, in a pull request; in one that doesn't, it goes on a tag's GitHub release (inputs `name`, `notes-dir`, `version-command`, `check-command`, `tag`, `guide`) |
 
