@@ -1,8 +1,8 @@
 # What's waiting on a person, across every repository in repos.json: one issue here, labelled needs-person-list, kept
 # up to date daily (and by hand: Actions → Needs a person → Run workflow), closed when nothing is waiting.
 #
-# - Issues and pull requests labelled needs-person: Claude stopped there (Issue to PR's `ask-person`, or its rounds
-#   ran out) and said why on it.
+# - Issues and pull requests labelled needs-person: Claude stopped there (Issue to PR's `ask-person`, its rounds
+#   running out, or a run that ended without a pull request or a comment) and why is said on it.
 # - Pull requests that are approved but have no auto-merge requested: the owner's own, waiting to be merged.
 #
 # It only reads the other repositories (they're public, so the workflow's token can) and writes this one's issue.

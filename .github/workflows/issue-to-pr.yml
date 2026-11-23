@@ -245,7 +245,7 @@ jobs:
       # Claude ends a run by opening the pull request, commenting or asking for a person, each of which leaves a
       # pull request or a marked comment. If it stopped with neither (commands refused, turns used up, the run
       # failing), the issue says so and waits for a person, instead of going quiet.
-      - if: always() && steps.open.outputs.run == 'true' && steps.claude.outcome != 'skipped'
+      - if: always() && steps.open.outputs.run == 'true'
         name: Make sure the issue hears back
         env:
           GH_TOKEN: ${{ github.token }}
@@ -264,6 +264,8 @@ jobs:
           fi
           if [ "$OUTCOME" = success ]; then
             why="Claude finished without opening a pull request or saying why (it may have been refused the commands it needed)."
+          elif [ "$OUTCOME" = skipped ]; then
+            why="The run failed before Claude started (checking out, setting up or writing its commands)."
           else
             why="Claude's run didn't finish ($OUTCOME)."
           fi
