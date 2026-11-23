@@ -153,6 +153,9 @@ jobs:
           anthropic_workspace_id: wrkspc_01G5WKL4tLYspnSa4BYdzUCS
           additional_permissions: |
             actions: read
+          # The runs it acts on are started by bots of ours: the docs-sync app labels the rules audit's issue (start),
+          # and Claude's own pushes and replies start the checks and the review it follows up (follow-up). Only these.
+          allowed_bots: claude,raineworks-doc-sync
           prompt: |
             REPO: ${{ github.repository }}
             ISSUE: #${{ github.event.issue.number }}, "${{ github.event.issue.title }}", opened by ${{ github.event.issue.user.login }}
@@ -334,6 +337,9 @@ jobs:
           anthropic_workspace_id: wrkspc_01G5WKL4tLYspnSa4BYdzUCS
           additional_permissions: |
             actions: read
+          # The runs it acts on are started by bots of ours: the docs-sync app labels the rules audit's issue (start),
+          # and Claude's own pushes and replies start the checks and the review it follows up (follow-up). Only these.
+          allowed_bots: claude,raineworks-doc-sync
           prompt: |
             REPO: ${{ github.repository }}
             PULL REQUEST: #${{ steps.state.outputs.pr }} (branch ${{ github.event.workflow_run.head_branch }}, checked out), round ${{ steps.state.outputs.round }}

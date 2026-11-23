@@ -72,10 +72,9 @@ jobs:
           ACTION: ${{ github.event.action }}
           ON_OPEN_ISSUE: ${{ !github.event.issue.pull_request && github.event.issue.state == 'open' }}
         run: |
-          caller=
-          for f in .github/workflows/issue-to-pr.yml .github/workflows/issue-to-pr.yaml; do
-            [ -f "$f" ] && { caller=$f; break; }
-          done
+          # The caller is whichever workflow calls Issue to PR, whatever its file is named.
+          caller=$(grep -lE 'uses:[[:space:]]*raine-works/agents/\.github/workflows/issue-to-pr\.yml@' \
+            .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -n 1 || true)
           theirs=false
           if [ "$ON_OPEN_ISSUE" = true ] && [ -n "$caller" ]; then
             if [ "$EVENT" = issues ] && [ "$ACTION" = opened ]; then
