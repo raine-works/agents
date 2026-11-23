@@ -242,6 +242,16 @@ jobs:
             --max-turns 150
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue view ${{ github.event.issue.number }}:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/remove:*),Bash(${{ steps.tools.outputs.dir }}/open-pr:*),Bash(${{ steps.tools.outputs.dir }}/ask-person:*),Bash(${{ steps.tools.outputs.dir }}/comment-on-issue:*),${{ inputs.allowed-commands }}"
             --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
+      # The commands Claude was refused, on the run: often why it stopped short (a check the caller's
+      # allowed-commands lacks, or a variant of one with other arguments).
+      - if: always() && steps.claude.outputs.execution_file != ''
+        name: Show what Claude was refused
+        env:
+          LOG: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          [ -f "$LOG" ] || exit 0
+          jq -r '.[] | select(.type == "result") | .permission_denials[]? |
+            "::warning title=Claude was refused a tool::\(.tool_name) \(.tool_input.command // .tool_input.file_path // "")"' "$LOG" | sort -u
       # Claude ends a run by opening the pull request, commenting or asking for a person, each of which leaves a
       # pull request or a marked comment. If it stopped with neither (commands refused, turns used up, the run
       # failing), the issue says so and waits for a person, instead of going quiet.
@@ -254,6 +264,7 @@ jobs:
           STARTED: ${{ steps.open.outputs.started }}
           OUTCOME: ${{ steps.claude.outcome }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          LOG: ${{ steps.claude.outputs.execution_file }}
         run: |
           pr="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
           said="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments?since=$STARTED" \
@@ -269,9 +280,17 @@ jobs:
           else
             why="Claude's run didn't finish ($OUTCOME)."
           fi
-          gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body "$why Nothing was opened for this issue. See [the run]($RUN_URL); mention @claude here to try again.
-
-          $MARKER"
+          refused=""
+          if [ -n "$LOG" ] && [ -f "$LOG" ]; then
+            refused="$(jq -r '.[] | select(.type == "result") | .permission_denials[]? |
+              "- `\(.tool_name) \(.tool_input.command // .tool_input.file_path // "" | gsub("`"; "'"'"'") | .[:150])`"' "$LOG" \
+              | sort -u | head -n 15)"
+          fi
+          body="$why Nothing was opened for this issue. See [the run]($RUN_URL); mention @claude here to try again."
+          if [ -n "$refused" ]; then
+            body+=$'\n\n'"Commands it was refused (a check missing from the caller's \`allowed-commands\` belongs there):"$'\n'"$refused"
+          fi
+          gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body "$body"$'\n\n'"$MARKER"
           gh label create needs-person --repo "$GITHUB_REPOSITORY" --color FBCA04 --description "Waiting on a person: Claude stopped here" --force >/dev/null
           gh issue edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --add-label needs-person >/dev/null
           echo "::warning::Claude stopped without a pull request or a comment; told the issue and labelled it needs-person."
@@ -514,3 +533,13 @@ jobs:
             --max-turns 150
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr view ${{ steps.state.outputs.pr }}:*),Bash(gh pr diff ${{ steps.state.outputs.pr }}:*),Bash(gh pr checks ${{ steps.state.outputs.pr }}:*),Bash(gh run view:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/remove:*),Bash(${{ steps.tools.outputs.dir }}/review-threads),Bash(${{ steps.tools.outputs.dir }}/reply-to-thread:*),Bash(${{ steps.tools.outputs.dir }}/comment:*),Bash(${{ steps.tools.outputs.dir }}/ask-person:*),Bash(${{ steps.tools.outputs.dir }}/edit-description:*),${{ inputs.allowed-commands }}"
             --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
+      # The commands Claude was refused, on the run: often why it stopped short (a check the caller's
+      # allowed-commands lacks, or a variant of one with other arguments).
+      - if: always() && steps.claude.outputs.execution_file != ''
+        name: Show what Claude was refused
+        env:
+          LOG: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          [ -f "$LOG" ] || exit 0
+          jq -r '.[] | select(.type == "result") | .permission_denials[]? |
+            "::warning title=Claude was refused a tool::\(.tool_name) \(.tool_input.command // .tool_input.file_path // "")"' "$LOG" | sort -u
