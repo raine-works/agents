@@ -100,12 +100,15 @@ repository keeps only a short caller for each, from `templates/workflows/` besid
    that don't run yet. Say so in the pull request.
 
 Three more aren't required, and the Base rules check doesn't ask for them. `issue-to-pr.yml` calls Issue to PR: an
-issue the owner opens (or one labelled `claude`) is worked into a pull request by Claude, which then answers the
-checks and the review until it's approved. Set its `workflow_run.workflows` to `[Code review, <the CI workflow's
+issue the owner opens, one labelled `claude` (the rules audit labels its own), or an open issue the owner or a
+collaborator comments `@claude` on is worked into a pull request by Claude, which then answers the checks and the
+review until it's approved. A caller made before the `@claude` start lacks its trigger: add `issue_comment: types:
+[created]` under `on:`, as the template has it (without it, `claude.yml` keeps answering those comments). Set its `workflow_run.workflows` to `[Code review, <the CI workflow's
 name>]` (just `[Code review]` without CI) and `allowed-commands` to the repository's checks, and make sure the
 repository has a `claude` label (`gh label create claude --description "Claude works this issue"`). `claude.yml` calls the shared @claude
-workflow: mention `@claude` in an issue, a comment or a review and Claude answers or makes the change, as `claude[bot]`
-(the Claude GitHub App, which Code review needs too). If the repository has its own @claude workflow, replace it with
+workflow: mention `@claude` in a pull request's comment or review, or on an issue, and Claude answers or makes the
+change, as `claude[bot]` (the Claude GitHub App, which Code review needs too). Where `issue-to-pr.yml` starts on it,
+a mention on an open issue is Issue to PR's instead. If the repository has its own @claude workflow, replace it with
 `templates/workflows/claude.yml` the same way, carrying the commands it let Claude run into `allowed-commands` (unless
 they're a Bun project's, the default); otherwise offer it, and don't add it unasked.
 
