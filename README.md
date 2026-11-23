@@ -38,7 +38,7 @@ as reusable workflows, so every repository runs the same ones:
 | --- | --- |
 | [`check-base.yml`](.github/workflows/check-base.yml) | **Base rules**: the base rules are wired up, every caller is there, and `.raineworks/base.md` is current. On `master` it opens `raineworks/base-sync` with the current copy, and `raineworks/workflows-sync` moving the callers' pins when these workflows change |
 | [`code-review.yml`](.github/workflows/code-review.yml) | **Code review**: Claude reviews each pull request against the rules (input `focus`: what matters most in that repository); `approve` approves it once Claude's review of its latest commit has nothing open |
-| [`docs-sync.yml`](.github/workflows/docs-sync.yml) | **Docs sync**: after `master`'s CI (or a push, without CI), Claude fixes docs the new commits made wrong, in a pull request that later runs add to rather than replace (input `docs`) |
+| [`docs-sync.yml`](.github/workflows/docs-sync.yml) | **Docs sync**: after `master`'s CI (or its Base rules check, without CI), Claude fixes docs the new commits made wrong, in a pull request that later runs add to rather than replace (input `docs`) |
 | [`rules-audit.yml`](.github/workflows/rules-audit.yml) | **Rules audit**: weekly and when the rules change, Claude audits `master` and keeps a `rules-audit` issue open while something breaks them (inputs `rules`, `checklist`) |
 
 Three more are shared but not required:

@@ -39,22 +39,21 @@ jobs:
       id-token: write
       actions: read
     # Only for a push to master whose checks passed, and not for its own merged pull requests or releases.
-    # A repository without CI calls it on a push to master instead. Its own and the syncs' changes are skipped whether
-    # they were squashed (their subject) or merged (the branch in the merge's subject).
+    # A repository without CI calls it after its Base rules check, which runs on every push to master (Claude's
+    # action doesn't take push events). Its own and the syncs' changes are skipped whether they were squashed (their
+    # subject) or merged (the branch in the merge's subject).
     if: >-
-      github.event_name == 'workflow_dispatch' || ((
-          (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
-            github.event.workflow_run.conclusion == 'success') ||
-          github.event_name == 'push'
-        ) &&
-        !startsWith(github.event.workflow_run.head_commit.message || github.event.head_commit.message, 'Sync docs') &&
-        !startsWith(github.event.workflow_run.head_commit.message || github.event.head_commit.message, 'Release ') &&
-        !startsWith(github.event.workflow_run.head_commit.message || github.event.head_commit.message, 'Sync .raineworks/') &&
-        !startsWith(github.event.workflow_run.head_commit.message || github.event.head_commit.message, 'Move Raineworks') &&
-        !contains(github.event.workflow_run.head_commit.message || github.event.head_commit.message, '/claude/docs-sync') &&
-        !contains(github.event.workflow_run.head_commit.message || github.event.head_commit.message, '/raineworks/base-sync') &&
-        !contains(github.event.workflow_run.head_commit.message || github.event.head_commit.message, '/raineworks/workflows-sync') &&
-        !contains(github.event.workflow_run.head_commit.message || github.event.head_commit.message, '/release-note/')
+      github.event_name == 'workflow_dispatch' || (
+        github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        !startsWith(github.event.workflow_run.head_commit.message, 'Sync docs') &&
+        !startsWith(github.event.workflow_run.head_commit.message, 'Release ') &&
+        !startsWith(github.event.workflow_run.head_commit.message, 'Sync .raineworks/') &&
+        !startsWith(github.event.workflow_run.head_commit.message, 'Move Raineworks') &&
+        !contains(github.event.workflow_run.head_commit.message, '/claude/docs-sync') &&
+        !contains(github.event.workflow_run.head_commit.message, '/raineworks/base-sync') &&
+        !contains(github.event.workflow_run.head_commit.message, '/raineworks/workflows-sync') &&
+        !contains(github.event.workflow_run.head_commit.message, '/release-note/')
       )
     runs-on: ubuntu-26.04
     timeout-minutes: 30
