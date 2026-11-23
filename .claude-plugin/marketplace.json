@@ -1,0 +1,12 @@
+{
+  "name": "raineworks",
+  "description": "Raineworks' agent skills, from raine-works/agents",
+  "owner": { "name": "raine-works" },
+  "plugins": [
+    {
+      "name": "raineworks",
+      "source": "./",
+      "description": "Raineworks' skills: raineworks-base adopts or updates the base rules and shared workflows in a raine-works repository"
+    }
+  ]
+}

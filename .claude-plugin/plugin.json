@@ -1,0 +1,6 @@
+{
+  "name": "raineworks",
+  "description": "Raineworks' skills: raineworks-base adopts or updates the base rules and shared workflows in a raine-works repository",
+  "author": { "name": "raine-works" },
+  "repository": "https://github.com/raine-works/agents"
+}
