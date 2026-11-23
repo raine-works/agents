@@ -159,7 +159,7 @@ jobs:
           claude_args: |
             --model claude-opus-5-5
             --max-turns 80
-            --allowedTools "Read,Glob,Grep,Edit(/*.md),Write(/*.md),Edit(/docs/**),Write(/docs/**),Edit(/**/README.md),Write(/**/README.md),Edit(/**/AGENTS.md),Write(/**/AGENTS.md)"
+            --allowedTools "Read,Glob,Grep,Edit(/*.md),Write(/*.md),Edit(/docs/**/*.md),Write(/docs/**/*.md),Edit(/**/README.md),Write(/**/README.md),Edit(/**/AGENTS.md),Write(/**/AGENTS.md)"
             --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**)"
       # The pull request is opened (or pushed to) as the docs-sync GitHub App (raine-works/agents' README, "Shared workflows"),
       # its token made only now, so Claude's step never had it.
@@ -189,8 +189,7 @@ jobs:
 
             🤖 Generated with [Claude Code](https://claude.com/claude-code)
           labels: documentation
-          add-paths: |
-            *.md
-            docs/**
-            **/README.md
-            **/AGENTS.md
+          # Every Markdown file Claude may have changed (git's `*` crosses folders: docs/, nested READMEs and AGENTS.md
+          # too), as one pattern that always matches: `git add` fails on a pattern that matches nothing, and
+          # `**/AGENTS.md` matches no AGENTS.md at the root. What Claude may change at all is its allowedTools above.
+          add-paths: '*.md'
