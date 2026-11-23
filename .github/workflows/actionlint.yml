@@ -1,4 +1,4 @@
-# Lints the reusable workflows and the templates (with shellcheck, for their `run` steps) and the scripts.
+# Lints the workflows (with shellcheck, for their `run` steps), the callers' templates, the scripts and the JSON.
 name: actionlint
 
 on:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   actionlint:
     name: actionlint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -21,8 +21,8 @@ jobs:
       - name: actionlint
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
-          ./actionlint -color .github/workflows/*.yml
+          ./actionlint -color .github/workflows/*.yml skills/raineworks-base/templates/workflows/*.yml
       - name: shellcheck
-        run: shellcheck scripts/*.sh
+        run: shellcheck scripts/*.sh skills/raineworks-base/scripts/*.sh
       - name: JSON
         run: jq empty repos.json rulesets/*.json

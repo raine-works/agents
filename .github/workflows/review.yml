@@ -1,5 +1,6 @@
-# This repository's own code review: the reusable workflow beside this one, as master has it. Its pull requests also
-# need the owner's review (CODEOWNERS): they change what every repository's review does.
+# This repository's own code review: the shared one beside this file, as master has it (so a pull request here is
+# reviewed by the review it doesn't change, never by its own copy). Its pull requests also need the owner's review
+# (CODEOWNERS): they change what every repository's rules, review and approval are.
 name: Code review
 
 on:
@@ -10,18 +11,20 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
+  id-token: write
+  actions: read
 
 jobs:
   code-review:
+    name: Code review
+    # master, not a commit: this repository's review is always master's latest, which the owner reviewed.
     uses: raine-works/agents/.github/workflows/code-review.yml@master
-    permissions:
-      contents: read
-      pull-requests: write
-      id-token: write
-      actions: read
+    secrets: inherit
     with:
-      caller: .github/workflows/review.yml
       focus: |
-        - a change to a reusable workflow that gives Claude, or code from a pull request, more than its job needs, or
-          that would let the review approve something it hasn't reviewed;
-        - a shared rule that contradicts another, or one a repository couldn't follow.
+        - a reusable workflow that gives Claude, or code from a pull request, a token, permission or tool beyond its
+          job, or that lets `approve` approve something Claude didn't finish reviewing;
+        - an action or a fetched script not pinned to a commit;
+        - a rule in base.md that contradicts another, or that a repository couldn't follow or check;
+        - a template, the skill or the README that no longer matches the workflows.
