@@ -130,8 +130,11 @@ jobs:
             echo '#!/usr/bin/env bash'
             echo 'set -euo pipefail'
             echo '[[ $# -eq 2 && -n "$1" && -n "$2" ]] || { echo "Usage: open-pr <title> <description>" >&2; exit 2; }'
-            printf 'exec gh pr create --repo %q --base %q --head %q --title "$1" --body "$2\n\nFixes #%s\n\n%s"\n' \
+            printf 'url="$(gh pr create --repo %q --base %q --head %q --title "$1" --body "$2\n\nFixes #%s\n\n%s")"\n' \
               "$GITHUB_REPOSITORY" "$BASE" "$BRANCH" "$NUMBER" "$MARKER"
+            # Merged by GitHub once it's approved and its checks pass (where the repository allows auto-merge).
+            echo 'echo "$url"'
+            echo 'gh pr merge --auto --merge "$url" || echo "Auto-merge is not allowed here: a person merges it once approved."'
           } > "$TOOLS/open-pr"
           # shellcheck disable=SC2016
           {

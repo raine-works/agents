@@ -96,7 +96,7 @@ applies them to each repository:
 | Ruleset | Does |
 | --- | --- |
 | **Protect master** ([`protect-master.json`](rulesets/protect-master.json)) | no deleting or force-pushing it; changes only by pull request, with one approval of the last push (Code review's `approve` gives it), stale approvals dismissed and every review thread resolved. For this repository, also its code owner's review (`.github/CODEOWNERS`): a change here changes every repository's review |
-| **`<repo>` checks** | `Base rules / check`, `Code review / review` and the repository's own pull request checks (`repos.json`) pass, on a branch up to date with `master` |
+| **`<repo>` checks** | `Base rules / check`, `Code review / review` and the repository's own pull request checks (`repos.json`) pass (the branch needn't be up to date with `master`) |
 
 The repository's admins (the owner) can bypass both when merging a pull request, never to push. Only list a check that
 runs on every pull request: a required check with a `paths` filter never reports on the pull requests it skips, and

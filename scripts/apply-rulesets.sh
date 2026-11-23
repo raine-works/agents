@@ -4,11 +4,13 @@
 # - "Protect master" (rulesets/protect-master.json): no deleting or force-pushing the default branch; every change
 #   through a pull request, with one approval of its last push (stale approvals dismissed) and every review thread
 #   resolved. A repository with `codeOwnerReview` (this one) also needs its code owner's review (CODEOWNERS).
-# - "<repo> checks": the shared workflows' checks (repos.json `review`) and the repository's own (its `checks`) pass,
-#   with the pull request up to date with the default branch.
+# - "<repo> checks": the shared workflows' checks (repos.json `review`) and the repository's own (its `checks`) pass.
+#   A pull request needn't be up to date with the default branch: requiring it dismissed every approval and re-ran
+#   every review whenever anything else merged.
 #
 # Both let the repository's admins bypass them, only to merge a pull request. It also lets GitHub Actions approve pull
-# requests (the review's `approve` job), keeping the repository's default workflow permissions as they are. Each
+# requests (the review's `approve` job), keeping the repository's default workflow permissions as they are, and allows
+# auto-merge, which the automation requests on the pull requests it opens (Claude's, the syncs', release notes). Each
 # ruleset is matched by name: changed if it's there, made if it isn't. With --dry-run it prints what it would send.
 #
 #   scripts/apply-rulesets.sh [--dry-run] [repo...]
@@ -59,6 +61,12 @@ for repo in "${repos[@]}"; do
 			-f default_workflow_permissions="$permissions" -F can_approve_pull_request_reviews=true --silent
 		echo "$repo: GitHub Actions may approve pull requests"
 	fi
+	if [ -n "$dry_run" ]; then
+		echo "$repo: would allow auto-merge"
+	else
+		gh api -X PATCH "repos/$owner/$repo" -F allow_auto_merge=true --silent
+		echo "$repo: auto-merge allowed"
+	fi
 
 	# A repository whose changes reach every other (this one) also needs its code owner's review: Claude's approval
 	# isn't enough.
@@ -77,7 +85,7 @@ for repo in "${repos[@]}"; do
 		rules: [{
 			type: "required_status_checks",
 			parameters: {
-				strict_required_status_checks_policy: true,
+				strict_required_status_checks_policy: false,
 				do_not_enforce_on_create: false,
 				required_status_checks: $checks
 			}
