@@ -295,6 +295,14 @@ jobs:
               | sort -u | head -n 15)"
           fi
           body="$why Nothing was opened for this issue. See [the run]($RUN_URL); mention @claude here to try again."
+          # Claude's own last message, which usually says why it stopped (quoted: it's Claude's text, not the run's).
+          last=""
+          if [ -n "$LOG" ] && [ -f "$LOG" ]; then
+            last="$(jq -r '[.[] | select(.type == "result")] | last | .result // "" | .[:1500]' "$LOG" | sed 's/^/> /')"
+          fi
+          if [ -n "$last" ] && [ "$last" != "> " ]; then
+            body+=$'\n\n'"Claude's last message:"$'\n'"$last"
+          fi
           if [ -n "$refused" ]; then
             body+=$'\n\n'"Commands it was refused (a check missing from the caller's \`allowed-commands\` belongs there):"$'\n'"$refused"
           fi
