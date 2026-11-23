@@ -45,7 +45,7 @@ Three more are shared but not required:
 
 | Workflow | Does |
 | --- | --- |
-| [`issue-to-pr.yml`](.github/workflows/issue-to-pr.yml) | **Issue to PR**: an issue the owner opens (or any issue once it's labelled `claude`, or that the owner comments `@claude` on) is worked by Claude into a pull request, which Claude then sees through its checks and Code review's findings until it's approved, with nobody starting it; after five rounds it asks for a person (input `allowed-commands`: the repository's checks). Claude pushes only to its own `claude/issue-<n>` branch and never merges |
+| [`issue-to-pr.yml`](.github/workflows/issue-to-pr.yml) | **Issue to PR**: an issue the owner opens (or any issue once it's labelled `claude`, or that the owner comments `@claude` on) is worked by Claude into a pull request, which Claude then sees through its checks and Code review's findings until it's approved, with nobody starting it; after five rounds it asks for a person (input `allowed-commands`: the repository's checks). Claude pushes only to its own `claude/issue-<n>` branch and never merges; where it stops for a person it says why and labels the issue or pull request `needs-person`, which `needs-person.yml` here lists daily in one issue |
 | [`claude.yml`](.github/workflows/claude.yml) | **Claude**: mention `@claude` in an issue, a comment or a review and Claude answers there (on an open issue, where the repository's Issue to PR caller starts on the mention, that workflow answers instead, with a pull request), or makes the change on a branch, as `claude[bot]` so its branches run the checks (input `allowed-commands`: the commands it may run, a Bun project's by default). Code review leaves replies that mention `@claude` to it |
 | [`release-note.yml`](.github/workflows/release-note.yml) | **Release note**: Claude writes a release's note from what changed since the last, when there's something the project's users would notice (otherwise none). In a repository that keeps its notes in a folder (`notes-dir`), it's the next release's, in a pull request; in one that doesn't, it goes on a tag's GitHub release (inputs `name`, `notes-dir`, `version-command`, `check-command`, `tag`, `guide`) |
 
@@ -96,7 +96,7 @@ applies them to each repository:
 | Ruleset | Does |
 | --- | --- |
 | **Protect master** ([`protect-master.json`](rulesets/protect-master.json)) | no deleting or force-pushing it; changes only by pull request, with one approval of the last push (Code review's `approve` gives it), stale approvals dismissed and every review thread resolved. For this repository, also its code owner's review (`.github/CODEOWNERS`): a change here changes every repository's review |
-| **`<repo>` checks** | `Base rules / check`, `Code review / review` and the repository's own pull request checks (`repos.json`) pass, on a branch up to date with `master` |
+| **`<repo>` checks** | `Base rules / check`, `Code review / review` and the repository's own pull request checks (`repos.json`) pass (the branch needn't be up to date with `master`) |
 
 The repository's admins (the owner) can bypass both when merging a pull request, never to push. Only list a check that
 runs on every pull request: a required check with a `paths` filter never reports on the pull requests it skips, and

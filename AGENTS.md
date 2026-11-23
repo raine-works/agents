@@ -17,4 +17,7 @@ repository runs. The base rules apply here too:
 - This repository runs its own shared workflows from `master` (`@master`, never a commit): `review.yml` (Code review),
   `mention.yml` (`@claude`) and `issues.yml` (Issue to PR), with its checks (actionlint, shellcheck, jq) as their
   commands and `.github/actions/setup` installing actionlint. Claude can't edit `.github/workflows/` there either.
+- `needs-person.yml` (this repository's own) keeps one issue listing what's waiting on a person across every
+  repository in `repos.json`: issues and pull requests labelled `needs-person`, and approved pull requests waiting to
+  be merged.
 - `actionlint` (with shellcheck) passes on every workflow and template, and `shellcheck` on every script.
