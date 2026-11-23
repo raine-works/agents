@@ -73,6 +73,7 @@ jobs:
     timeout-minutes: 60
     outputs:
       reviewed: ${{ steps.ready.outputs.run == 'true' }}
+      approvable: ${{ steps.verdict.outputs.approvable == 'true' }}
     steps:
       - id: trigger
         name: Check the comment replies to Claude
@@ -256,14 +257,21 @@ jobs:
             Only report what you've checked against the code and are confident is a real problem; say
             nothing about taste. Put each new finding (not one already in a thread, resolved or not) on its
             line with `mcp__github_inline_comment__create_inline_comment`, saying what's wrong, what it
-            breaks, and the fix.
+            breaks, and the fix. Every finding is an inline comment, never only in the summary: one about a
+            file or line outside the diff goes on the nearest changed line, naming where the problem is. A
+            note that isn't a problem to fix (something you couldn't check, say) isn't a finding.
 
             ## 4. Summarise
 
             Only if you reviewed new commits in step 3, leave one short summary comment with
             `${{ steps.tools.outputs.dir }}/comment '<summary>'` (the summary as one quoted argument): new findings by severity, earlier ones now resolved, and those still open (or
-            that you found nothing), ending with `Reviewed up to <full HEAD sha>`. Otherwise post no
-            summary. Don't approve or request changes.
+            that you found nothing), ending with these two lines, exactly:
+                Open findings: <how many of your threads are still unresolved, new and earlier>
+                Reviewed up to <full HEAD sha>
+            If you didn't review new commits but resolved a thread in step 2 (or one is open again), post a
+            short update instead, saying which, ending with the same two lines. Otherwise post nothing.
+            Don't approve or request changes: the pull request is approved for you when the last summary for
+            its latest commit says `Open findings: 0` and none of your threads is open.
           # No `Bash(git …:*)` rules: a rule matches by prefix whatever options follow, so `git diff:*` allows
           # `--output=<file>` (writing anywhere: over the commands above, say) and `git grep:*` `-O<program>` (running
           # one). Without a rule, Claude Code's own read-only check runs git's read-only forms (diff, log, show,
@@ -306,6 +314,33 @@ jobs:
               }
           fi
 
+      # Whether `approve` should run: so its check shows green only when it approves, and is skipped (grey) while
+      # something is open. `approve` checks all of it again before it approves.
+      - id: verdict
+        name: Can it be approved
+        if: steps.ready.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          THREADS_QUERY: >-
+            query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) { reviewThreads(first: 100) { nodes { isResolved
+            comments(first: 1) { nodes { author { login } } } } } } } }
+        run: |
+          head="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)"
+          summary="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json comments \
+            --jq "[.comments[] | select(.author.login == \"claude\") | select(.body | contains(\"Reviewed up to $head\")) | .body] | last // \"\"")"
+          declared="$(grep -oE '^ *Open findings: *[0-9]+' <<<"$summary" | tail -1 | grep -oE '[0-9]+$' || true)"
+          open="$(gh api graphql -F owner="${GITHUB_REPOSITORY%%/*}" -F name="${GITHUB_REPOSITORY#*/}" -F number="$PR" \
+            -f query="$THREADS_QUERY" \
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | select(.comments.nodes[0].author.login == "claude")] | length')"
+          if [ -n "$summary" ] && [ "$declared" = 0 ] && [ "$open" = 0 ]; then
+            echo "approvable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Not approvable: last summary for $head declares ${declared:-no count} open findings; $open of Claude's threads are open." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "approvable=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Approves the pull request once Claude's review of its latest commit is done with none of its findings left open:
   # that's the approval `master` requires. A check of the review's own summary and threads, never Claude's say-so, so
   # nothing in the pull request (its code, its comments) can ask for it. It approves that exact commit (`commit_id`):
@@ -313,7 +348,8 @@ jobs:
   approve:
     name: approve
     needs: review
-    if: needs.review.result == 'success' && needs.review.outputs.reviewed == 'true'
+    # Skipped (grey) unless the review says it can be approved: its check is green only when it approves.
+    if: needs.review.result == 'success' && needs.review.outputs.approvable == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
@@ -334,6 +370,15 @@ jobs:
             --jq "[.comments[] | select(.author.login == \"claude\") | select(.body | contains(\"Reviewed up to $head\"))] | length")"
           if [ "$reviewed" = 0 ]; then
             echo "Claude hasn't finished reviewing $head: not approving."
+            exit 0
+          fi
+          # The last summary for this commit must declare nothing open: a finding Claude stated only there blocks
+          # it as an open thread does.
+          declared="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json comments \
+            --jq "[.comments[] | select(.author.login == \"claude\") | select(.body | contains(\"Reviewed up to $head\")) | .body] | last // \"\"" \
+            | grep -oE '^ *Open findings: *[0-9]+' | tail -1 | grep -oE '[0-9]+$' || true)"
+          if [ "$declared" != 0 ]; then
+            echo "Claude's last summary for $head declares ${declared:-no count of} open findings: not approving." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           open="$(gh api graphql -F owner="${GITHUB_REPOSITORY%%/*}" -F name="${GITHUB_REPOSITORY#*/}" -F number="$PR" \
