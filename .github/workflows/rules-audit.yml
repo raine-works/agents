@@ -115,7 +115,13 @@ jobs:
               what the rules say needs them, a coverage threshold (where there is one) never lowered;
             - images, if there are any: distroless where they can be, pinned by digest, non-root;
             - CI: no pull_request job that installs, builds or tests the branch gets a secret or a write token;
-            - the repository's own rules: search the source (Grep) for what they forbid.
+            - the repository's own rules: search the source (Grep) for what they forbid;
+            - the rules files themselves: AGENTS.md holds only the repository's own rules (the base rules'
+              "Documentation"), so a rule in AGENTS.md (or another of the repository's rules files) that only restates
+              what .raineworks/base.md already says is a finding. Give both places (the AGENTS.md line, and the
+              base.md section it repeats) and, as the fix, removing it from AGENTS.md. A rule that's more specific
+              than the base rule (a stricter limit, this repository's tool, path or command, an exception the base
+              rules allow) isn't a repeat: keep it, or report only the part that repeats.
             ${{ inputs.checklist }}
 
             Report only what you verified, at a file and line where there is one. Don't report a rule you couldn't
