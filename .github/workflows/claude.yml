@@ -63,9 +63,24 @@ jobs:
           fetch-depth: 0
       # The calling repository's own action, if it has one (a local path is read from the checkout, not from
       # raine-works/agents): what its commands need installed.
+      # An issue (not a pull request) in a repository that calls Issue to PR is that workflow's: it starts on the same
+      # mention, and works the issue into a pull request it sees through review. Answering here too would make two.
+      - id: route
+        name: Leave issues to Issue to PR
+        env:
+          ON_ISSUE: ${{ (github.event_name == 'issues' || github.event_name == 'issue_comment') && !github.event.issue.pull_request }}
+          HAS_ISSUE_TO_PR: ${{ hashFiles('.github/workflows/issue-to-pr.yml', '.github/workflows/issue-to-pr.yaml') != '' }}
+        run: |
+          if [ "$ON_ISSUE" = true ] && [ "$HAS_ISSUE_TO_PR" = true ]; then
+            echo "An issue here is Issue to PR's: it answers this mention."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: ./.github/actions/setup
-        if: hashFiles('.github/actions/setup/action.yml', '.github/actions/setup/action.yaml') != ''
-      - uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
+        if: steps.route.outputs.run == 'true' && hashFiles('.github/actions/setup/action.yml', '.github/actions/setup/action.yaml') != ''
+      - if: steps.route.outputs.run == 'true'
+        uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
         with:
           # Workload identity federation: the job's GitHub OIDC token (id-token: write) is exchanged for a
           # short-lived Anthropic one. These are identifiers, not secrets.
