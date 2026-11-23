@@ -61,11 +61,40 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # A mention on an open issue is Issue to PR's where the repository's caller starts on it (an issue opened with it,
+      # or, if the caller listens for issue comments, a comment): Issue to PR works the issue into a pull request it
+      # sees through review, and answering here too would make two. Anything else (a pull request, a closed issue, an
+      # assignment, a caller without the trigger) is answered here.
+      - id: route
+        name: Leave issues to Issue to PR
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          ON_OPEN_ISSUE: ${{ !github.event.issue.pull_request && github.event.issue.state == 'open' }}
+        run: |
+          # The caller is whichever workflow calls Issue to PR, whatever its file is named.
+          caller=$(grep -lE 'uses:[[:space:]]*raine-works/agents/\.github/workflows/issue-to-pr\.yml@' \
+            .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | head -n 1 || true)
+          theirs=false
+          if [ "$ON_OPEN_ISSUE" = true ] && [ -n "$caller" ]; then
+            if [ "$EVENT" = issues ] && [ "$ACTION" = opened ]; then
+              theirs=true
+            elif [ "$EVENT" = issue_comment ] && grep -qE '^[[:space:]]*issue_comment:' "$caller"; then
+              theirs=true
+            fi
+          fi
+          if $theirs; then
+            echo "Issue to PR answers this mention ($caller starts on it)."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
       # The calling repository's own action, if it has one (a local path is read from the checkout, not from
       # raine-works/agents): what its commands need installed.
       - uses: ./.github/actions/setup
-        if: hashFiles('.github/actions/setup/action.yml', '.github/actions/setup/action.yaml') != ''
-      - uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
+        if: steps.route.outputs.run == 'true' && hashFiles('.github/actions/setup/action.yml', '.github/actions/setup/action.yaml') != ''
+      - if: steps.route.outputs.run == 'true'
+        uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
         with:
           # Workload identity federation: the job's GitHub OIDC token (id-token: write) is exchanged for a
           # short-lived Anthropic one. These are identifiers, not secrets.
