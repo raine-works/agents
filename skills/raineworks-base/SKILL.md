@@ -87,8 +87,8 @@ repository keeps only a short caller for each, from `templates/workflows/` besid
    `raine-works/agents`: `gh api repos/raine-works/agents/commits/master --jq .sha`. Change nothing else but the
    inputs and, in `docs-sync.yml` and `rules-audit.yml`, the name of the workflow they follow.
 2. **The workflow they follow** is the one that tests a push to `master` (its `name:`, e.g. `Test`, `CI`). Set it in
-   both callers' `workflow_run.workflows`. If the repository has none, use `push: branches: [master]` in its place in
-   `docs-sync.yml`, and drop `workflow_run` from `rules-audit.yml` (it still runs weekly).
+   both callers' `workflow_run.workflows`. If the repository has none, both follow `Base rules` instead (the Base rules check
+   runs on every push to `master`; Claude's action doesn't take `push` events).
 3. **Replace any copy** of one of these workflows the repository already has (a `code-review.yml`,
    `claude-review.yml`, `docs-sync.yml`, `check-base.yml`, whatever its name: read the files) with its caller. Before
    you delete one, carry what was specific to this repository into the caller's inputs (`with:`): its review
