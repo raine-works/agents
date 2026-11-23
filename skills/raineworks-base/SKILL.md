@@ -99,7 +99,7 @@ repository keeps only a short caller for each, from `templates/workflows/` besid
    `scripts/apply-rulesets.sh <repo>`, which makes them required; not before, or every pull request waits on checks
    that don't run yet. Say so in the pull request.
 
-Three more aren't required, and the Base rules check doesn't ask for them. `issue-to-pr.yml` calls Issue to PR: an
+Four more aren't required, and the Base rules check doesn't ask for them. `issue-to-pr.yml` calls Issue to PR: an
 issue the owner opens, one labelled `claude` (the rules audit labels its own), or an open issue the owner or a
 collaborator comments `@claude` on is worked into a pull request by Claude, which then answers the checks and the
 review until it's approved. A caller made before the `@claude` start lacks its trigger: add `issue_comment: types:
@@ -112,7 +112,9 @@ a mention on an open issue is Issue to PR's instead. If the repository has its o
 `templates/workflows/claude.yml` the same way, carrying the commands it let Claude run into `allowed-commands` (unless
 they're a Bun project's, the default); otherwise offer it, and don't add it unasked.
 
-The other is `release.yml`, the caller of the shared release note workflow (`release-note.yml`), for a repository with
+`image-pins.yml` calls Image pins, for a repository whose workflows run a container image directly, pinned by digest with the tag and date in a comment (`uses: docker://<image>@sha256:<digest> # <tag>, <date>`): weekly, it opens a pull request moving any pin whose tag has moved. Add it alongside such a pin; otherwise don't.
+
+The last is `release.yml`, the caller of the shared release note workflow (`release-note.yml`), for a repository with
 releases. If the repository has its own copy of it, replace it with `templates/workflows/release.yml` the same way,
 and otherwise offer it; don't add it unasked. Set `name` to the project's name, then:
 
