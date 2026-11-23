@@ -175,6 +175,6 @@ jobs:
             Raineworks' shared workflows changed in `raine-works/agents`, so the Base rules check moved this repository's
             callers to `raine-works/agents@${{ steps.pins.outputs.latest }}`. Only the pins change.
 
-            The Code review check fails on this pull request, since it changes its caller: a person reviews it, and
-            merges it with the owner's bypass.
+            Claude can't review it, since it changes Code review's own caller; Code review checks instead that it only
+            moves pins to commits on agents' master, and approves it.
           add-paths: .github/workflows/*

@@ -73,7 +73,8 @@ jobs:
     timeout-minutes: 60
     outputs:
       reviewed: ${{ steps.ready.outputs.run == 'true' }}
-      approvable: ${{ steps.verdict.outputs.approvable == 'true' }}
+      approvable: ${{ steps.verdict.outputs.approvable == 'true' || steps.ready.outputs.pin_only == 'true' }}
+      pin_only: ${{ steps.ready.outputs.pin_only == 'true' }}
     steps:
       - id: trigger
         name: Check the comment replies to Claude
@@ -104,21 +105,58 @@ jobs:
           persist-credentials: true
 
       # The action refuses to run a review workflow that differs from the default branch's, so Claude can't
-      # review a pull request that changes this file (it runs once merged). The job fails rather than passing
-      # unreviewed: "Code review" is a required check, so a person has to review such a pull request, and an
-      # admin merge it past the failed check.
+      # review a pull request that changes this file (it runs once merged). One that only moves the callers' pins
+      # to commits on raine-works/agents' master (the Base rules check's workflows sync) is checked here instead,
+      # by code: every changed file is a workflow, each is the same as at the merge base once the agents commit in
+      # `uses: raine-works/agents/...@<sha>` is set aside, and every new commit is on agents' master, which its
+      # owner reviewed. That's passed, and `approve` approves it. Any other change fails rather than passing
+      # unreviewed: "Code review" is a required check, so a person has to review it, and an admin merge it.
       - id: ready
         if: steps.trigger.outputs.run == 'true'
         name: Check this workflow matches the default branch's
         env:
           DEFAULT: origin/${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if git diff --quiet "$DEFAULT" HEAD -- .github/workflows/code-review.yml; then
             echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error title=Code review needs a person::This pull request changes the review workflow, which Claude runs only once it's on $DEFAULT. A person has to review it: this check stays failed."
-            exit 1
+            exit 0
           fi
+          pin='raine-works/agents/\.github/workflows/[a-z0-9-]+\.yml@[0-9a-f]{40}'
+          base="$(git merge-base "$DEFAULT" HEAD)"
+          why=""
+          files="$(git diff --name-only "$base" HEAD)"
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            case "$f" in
+              .github/workflows/*.yml|.github/workflows/*.yaml) ;;
+              *) why="it changes $f, not only workflows"; break ;;
+            esac
+            # Present on both sides, and the same once the pins are set aside.
+            old="$(git show "$base:$f" 2>/dev/null)" || { why="it adds $f"; break; }
+            new="$(git show "HEAD:$f" 2>/dev/null)" || { why="it removes $f"; break; }
+            norm='s#(raine-works/agents/\.github/workflows/[a-z0-9-]+\.yml@)[0-9a-f]{40}#\1PIN#g'
+            if [ "$(sed -E "$norm" <<<"$old")" != "$(sed -E "$norm" <<<"$new")" ]; then
+              why="$f changes more than its pins"; break
+            fi
+          done <<<"$files"
+          if [ -z "$why" ]; then
+            for sha in $(git diff "$base" HEAD -- .github/workflows | grep -E '^\+' | grep -oE "$pin" | sed 's/.*@//' | sort -u); do
+              status="$(gh api "repos/raine-works/agents/compare/$sha...master" --jq .status 2>/dev/null || echo missing)"
+              case "$status" in
+                identical|ahead) ;;
+                *) why="raine-works/agents@$sha isn't on its master ($status)"; break ;;
+              esac
+            done
+          fi
+          if [ -z "$why" ] && [ -n "$files" ]; then
+            echo "Only moves the shared workflows' pins to commits on raine-works/agents' master: checked here, not by Claude." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "pin_only=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error title=Code review needs a person::This pull request changes the review workflow ($why), which Claude runs only once it's on $DEFAULT. A person has to review it: this check stays failed."
+          exit 1
 
       # What Claude may post, as commands of its own rather than `gh`: an allowed command matches only by its
       # prefix, so allowing `gh api graphql` would allow any query or mutation the token can make (approving a pull
@@ -360,12 +398,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          PIN_ONLY: ${{ needs.review.outputs.pin_only }}
+          CHECKED: ${{ github.event.pull_request.head.sha }}
           THREADS_QUERY: >-
             query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) {
             pullRequest(number: $number) { reviewThreads(first: 100) { nodes { isResolved
             comments(first: 1) { nodes { author { login } } } } } } } }
         run: |
           head="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)"
+          # A pin-only move, which `review` checked by code (Claude can't run on it): approved as that.
+          if [ "$PIN_ONLY" = true ]; then
+            if [ "$head" != "$CHECKED" ]; then
+              echo "A push landed after the check ($head): its own run decides."
+              exit 0
+            fi
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" -f event=APPROVE -f commit_id="$head" \
+              -f body="$head only moves the shared workflows' pins to commits on raine-works/agents' master, checked by the review workflow (Claude can't review a change to its own caller)." --silent
+            echo "Approved $head: a pin-only move to raine-works/agents' master." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           reviewed="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json comments \
             --jq "[.comments[] | select(.author.login == \"claude\") | select(.body | contains(\"Reviewed up to $head\"))] | length")"
           if [ "$reviewed" = 0 ]; then
