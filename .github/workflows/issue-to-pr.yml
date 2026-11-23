@@ -15,8 +15,9 @@
 #   rounds it stops and asks for a person.
 #
 # Claude never merges, and never gets raw git or gh: it edits files, runs the repository's checks
-# (`allowed-commands`), and uses a few commands written here that can only commit and push to its own branch, open its
-# own pull request, and post on its own issue, pull request and threads (as the review's are). It pushes as
+# (`allowed-commands`), and uses a few commands written here that can only delete tracked files (never a workflow or
+# .raineworks/), commit and push to its own branch, open its own pull request, and post on its own issue, pull request
+# and threads (as the review's are). It pushes as
 # claude[bot] (the Claude GitHub App, with the token the action signs in for), so the checks run on its commits. It
 # signs in to Anthropic with the job's OIDC token (workload identity federation): no secret.
 name: Issue to PR
@@ -139,6 +140,21 @@ jobs:
             echo '[[ $# -eq 1 && -n "$1" ]] || { echo "Usage: comment-on-issue <body>" >&2; exit 2; }'
             printf 'exec gh issue comment %q --repo %q --body "$1\n\n%s"\n' "$NUMBER" "$GITHUB_REPOSITORY" "$MARKER"
           } > "$TOOLS/comment-on-issue"
+          # Deleting tracked files, which Edit and Write can't: only inside the repository, never a workflow or the base
+          # rules' copy (as Edit and Write may not touch them). Staged here; publish commits it.
+          # shellcheck disable=SC2016
+          {
+            echo '#!/usr/bin/env bash'
+            echo 'set -euo pipefail'
+            echo '[[ $# -ge 1 ]] || { echo "Usage: remove <path>..." >&2; exit 2; }'
+            echo 'for p in "$@"; do'
+            echo '  [[ -f "$p" && ! -L "$p" ]] || { echo "Not a file: $p" >&2; exit 1; }'
+            echo '  full="$(git ls-files --full-name --error-unmatch -- "$p" 2>/dev/null)" || { echo "Not a tracked file: $p" >&2; exit 1; }'
+            echo '  case "$full" in .github/workflows/*|.raineworks/*) echo "Not removable here: $full" >&2; exit 1;; esac'
+            echo 'done'
+            echo 'git rm -q -- "$@"'
+            echo 'echo "Removed (publish commits it): $*"'
+          } > "$TOOLS/remove"
           chmod +x "$TOOLS"/*
           echo "dir=$TOOLS" >> "$GITHUB_OUTPUT"
       - id: claude
@@ -175,6 +191,7 @@ jobs:
             4. Otherwise make the change: the smallest one that solves the issue, with tests where the repository
                has them, and the docs it makes wrong updated. Run the checks (the commands you're allowed) until
                they pass.
+            To delete a file, `${{ steps.tools.outputs.dir }}/remove <path>...` (rm and git rm aren't available).
             5. Commit and push: `${{ steps.tools.outputs.dir }}/publish '<commit message>'` (an imperative subject;
                a body saying why; end it with `Co-Authored-By: Claude <noreply@anthropic.com>`).
             6. Open the pull request: `${{ steps.tools.outputs.dir }}/open-pr '<title>' '<description>'`, the
@@ -189,7 +206,7 @@ jobs:
           claude_args: |
             --model claude-opus-5-5
             --max-turns 150
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue view ${{ github.event.issue.number }}:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/open-pr:*),Bash(${{ steps.tools.outputs.dir }}/comment-on-issue:*),${{ inputs.allowed-commands }}"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue view ${{ github.event.issue.number }}:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/remove:*),Bash(${{ steps.tools.outputs.dir }}/open-pr:*),Bash(${{ steps.tools.outputs.dir }}/comment-on-issue:*),${{ inputs.allowed-commands }}"
             --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
 
   follow-up:
@@ -323,6 +340,21 @@ jobs:
             echo '[[ $# -eq 1 && -n "$1" ]] || { echo "Usage: comment <body>" >&2; exit 2; }'
             printf 'exec gh pr comment %q --repo %q --body "$1\n\n%s round %s"\n' "$PR" "$GITHUB_REPOSITORY" "$MARKER" "$ROUND"
           } > "$TOOLS/comment"
+          # Deleting tracked files, which Edit and Write can't: only inside the repository, never a workflow or the base
+          # rules' copy (as Edit and Write may not touch them). Staged here; publish commits it.
+          # shellcheck disable=SC2016
+          {
+            echo '#!/usr/bin/env bash'
+            echo 'set -euo pipefail'
+            echo '[[ $# -ge 1 ]] || { echo "Usage: remove <path>..." >&2; exit 2; }'
+            echo 'for p in "$@"; do'
+            echo '  [[ -f "$p" && ! -L "$p" ]] || { echo "Not a file: $p" >&2; exit 1; }'
+            echo '  full="$(git ls-files --full-name --error-unmatch -- "$p" 2>/dev/null)" || { echo "Not a tracked file: $p" >&2; exit 1; }'
+            echo '  case "$full" in .github/workflows/*|.raineworks/*) echo "Not removable here: $full" >&2; exit 1;; esac'
+            echo 'done'
+            echo 'git rm -q -- "$@"'
+            echo 'echo "Removed (publish commits it): $*"'
+          } > "$TOOLS/remove"
           chmod +x "$TOOLS"/*
           echo "dir=$TOOLS" >> "$GITHUB_OUTPUT"
       - id: claude
@@ -358,6 +390,7 @@ jobs:
                If the finding is right, fix it. If it's wrong, reply in its thread saying why, briefly and with the
                evidence: `${{ steps.tools.outputs.dir }}/reply-to-thread <databaseId of its first comment> '<reply>'`.
                Never leave one unanswered, and never resolve one: the review resolves its own.
+               To delete a file, `${{ steps.tools.outputs.dir }}/remove <path>...` (rm and git rm aren't available).
             4. Run the checks (the commands you're allowed) until they pass, then commit and push the fixes:
                `${{ steps.tools.outputs.dir }}/publish '<commit message>'` (end it with
                `Co-Authored-By: Claude <noreply@anthropic.com>`).
@@ -369,5 +402,5 @@ jobs:
           claude_args: |
             --model claude-opus-5-5
             --max-turns 150
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr view ${{ steps.state.outputs.pr }}:*),Bash(gh pr diff ${{ steps.state.outputs.pr }}:*),Bash(gh pr checks ${{ steps.state.outputs.pr }}:*),Bash(gh run view:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/review-threads),Bash(${{ steps.tools.outputs.dir }}/reply-to-thread:*),Bash(${{ steps.tools.outputs.dir }}/comment:*),${{ inputs.allowed-commands }}"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr view ${{ steps.state.outputs.pr }}:*),Bash(gh pr diff ${{ steps.state.outputs.pr }}:*),Bash(gh pr checks ${{ steps.state.outputs.pr }}:*),Bash(gh run view:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/remove:*),Bash(${{ steps.tools.outputs.dir }}/review-threads),Bash(${{ steps.tools.outputs.dir }}/reply-to-thread:*),Bash(${{ steps.tools.outputs.dir }}/comment:*),${{ inputs.allowed-commands }}"
             --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
