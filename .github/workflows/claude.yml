@@ -108,3 +108,4 @@ jobs:
             --model claude-opus-5-5
             --max-turns 80
             --allowedTools "${{ inputs.allowed-commands }}"
+            --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
