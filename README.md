@@ -39,7 +39,7 @@ as reusable workflows, so every repository runs the same ones:
 | [`check-base.yml`](.github/workflows/check-base.yml) | **Base rules**: the base rules are wired up, every caller is there, and `.raineworks/base.md` is current. On `master` it opens `raineworks/base-sync` with the current copy, and `raineworks/workflows-sync` moving the callers' pins when these workflows change |
 | [`code-review.yml`](.github/workflows/code-review.yml) | **Code review**: Claude reviews each pull request against the rules (input `focus`: what matters most in that repository); `approve` approves it once Claude's review of its latest commit has nothing open |
 | [`docs-sync.yml`](.github/workflows/docs-sync.yml) | **Docs sync**: after `master`'s CI (or its Base rules check, without CI), Claude fixes docs the new commits made wrong, in a pull request that later runs add to rather than replace (input `docs`) |
-| [`rules-audit.yml`](.github/workflows/rules-audit.yml) | **Rules audit**: weekly and when the rules change, Claude audits `master` and keeps a `rules-audit` issue open while something breaks them (inputs `rules`, `checklist`) |
+| [`rules-audit.yml`](.github/workflows/rules-audit.yml) | **Rules audit**: weekly and when the rules change, Claude audits `master` and keeps a `rules-audit` issue open while something breaks them; where the repository calls Issue to PR, it labels the issue `claude` (as the docs-sync app) when it's opened or its findings change, so Claude fixes them in a pull request (inputs `rules`, `checklist`) |
 
 Three more are shared but not required:
 
@@ -71,8 +71,9 @@ What they need, set once per repository:
   that calls Code review or Claude: they post, and Claude commits, as `claude[bot]`. Without it they fail with "Claude
   Code is not installed on this repository".
 - **The docs-sync GitHub App** (`raineworks-doc-sync`), installed on every repository, with **Contents**, **Pull
-  requests** and **Workflows** write (Workflows to move the pins). Docs sync, the Base rules check's syncs and release
-  notes open their pull requests as it: one opened with a workflow's own token would start no checks. Each repository
+  requests**, **Workflows** and **Issues** write (Workflows to move the pins, Issues for the rules audit to hand its
+  issue to Issue to PR). Docs sync, the Base rules check's syncs and release notes open their pull requests as it, and
+  the rules audit labels its issue as it: what a workflow's own token does starts no other workflow. Each repository
   has its client ID as the `DOCS_SYNC_APP_CLIENT_ID` variable and a private key as the `DOCS_SYNC_APP_PRIVATE_KEY`
   secret, which callers pass on with `secrets: inherit`:
   `gh variable set DOCS_SYNC_APP_CLIENT_ID -R raine-works/<repo> --body <client id>`,
