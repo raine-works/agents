@@ -189,8 +189,7 @@ jobs:
 
             🤖 Generated with [Claude Code](https://claude.com/claude-code)
           labels: documentation
-          add-paths: |
-            *.md
-            docs/**
-            **/README.md
-            **/AGENTS.md
+          # Every Markdown file Claude may have changed (git's `*` crosses folders: docs/, nested READMEs and AGENTS.md
+          # too), as one pattern that always matches: `git add` fails on a pattern that matches nothing, and
+          # `**/AGENTS.md` matches no AGENTS.md at the root. What Claude may change at all is its allowedTools above.
+          add-paths: '*.md'
