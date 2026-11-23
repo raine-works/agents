@@ -359,7 +359,8 @@ jobs:
             printf 'exec gh api graphql -F owner=%q -F name=%q -F number=%q -f query=%q\n' \
               "${GITHUB_REPOSITORY%%/*}" "${GITHUB_REPOSITORY#*/}" "$PR" "$THREADS_QUERY"
           } > "$TOOLS/review-threads"
-          # Stopping for a person: says why on the pull request, and labels it needs-person.
+          # Stopping for a person: says why on the pull request, labels it and its issue needs-person, and turns
+          # auto-merge off, so it stays open (and listed) until a person has done their part.
           # shellcheck disable=SC2016
           {
             echo '#!/usr/bin/env bash'
@@ -368,7 +369,9 @@ jobs:
             printf 'gh pr comment %q --repo %q --body "$1\n\n%s"\n' "$PR" "$GITHUB_REPOSITORY" "$MARKER"
             printf 'gh label create needs-person --repo %q --color FBCA04 --description "Waiting on a person: Claude stopped here" --force >/dev/null\n' "$GITHUB_REPOSITORY"
             printf 'gh pr edit %q --repo %q --add-label needs-person >/dev/null\n' "$PR" "$GITHUB_REPOSITORY"
-            echo 'echo "Asked for a person, and labelled needs-person."'
+            printf 'gh issue edit %q --repo %q --add-label needs-person >/dev/null\n' "${BRANCH#claude/issue-}" "$GITHUB_REPOSITORY"
+            printf 'gh pr merge %q --repo %q --disable-auto >/dev/null 2>&1 || true\n' "$PR" "$GITHUB_REPOSITORY"
+            echo 'echo "Asked for a person: labelled needs-person, auto-merge off."'
           } > "$TOOLS/ask-person"
           # A reply, in a thread the review started on this pull request, marked so the review answers it.
           # shellcheck disable=SC2016
@@ -463,9 +466,10 @@ jobs:
                `${{ steps.tools.outputs.dir }}/publish '<commit message>'` (end it with
                `Co-Authored-By: Claude <noreply@anthropic.com>`).
             If something can only be fixed by a person (a change to `.github/workflows/` or `.raineworks/`, which you
-            can't make, or a decision), write the exact change into a reply or the description, then
-            `${{ steps.tools.outputs.dir }}/ask-person '<what a person needs to do>'` (it labels the pull request
-            needs-person).
+            can't make, or a decision): rewrite the description with `edit-description` to say exactly what's left
+            and to end `Part of #<issue>` rather than `Fixes`, then
+            `${{ steps.tools.outputs.dir }}/ask-person '<what a person needs to do>'` (it labels the pull request and
+            its issue needs-person and turns auto-merge off, so it waits for them).
             5. Leave one short comment saying what you fixed and what you replied to:
                `${{ steps.tools.outputs.dir }}/comment '<summary>'`.
 
