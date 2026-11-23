@@ -175,9 +175,12 @@ jobs:
 
   follow-up:
     name: follow-up
-    # A workflow the caller names finished on a pull request from one of Issue to PR's branches.
+    # A workflow the caller names finished on a pull request from one of Issue to PR's branches: after a push, or
+    # Code review's answer to a reply (so a finding Claude argued against, and the review still holds, comes back to
+    # Claude: the two go back and forth until they agree or the rounds run out).
     if: >-
-      github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' &&
+      github.event_name == 'workflow_run' &&
+      contains(fromJSON('["pull_request", "pull_request_review_comment"]'), github.event.workflow_run.event) &&
       startsWith(github.event.workflow_run.head_branch, 'claude/issue-') &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-26.04
