@@ -1,0 +1,74 @@
+# Rolls a change here out at once: when master's shared workflows or base rules change, it starts every repository's
+# Base rules check (repos.json), whose sync opens (or updates) the pull requests moving that repository's pins and
+# copy of base.md, which Code review approves and GitHub auto-merges. Without this they wait for each repository's own
+# schedule, up to six hours.
+#
+# It starts the workflows as the docs-sync app (DOCS_SYNC_APP_CLIENT_ID, DOCS_SYNC_APP_PRIVATE_KEY), which needs
+# Actions write on each repository: without it, a warning, and the schedule still gets there.
+name: Roll out
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - base.md
+      - .github/workflows/check-base.yml
+      - .github/workflows/code-review.yml
+      - .github/workflows/docs-sync.yml
+      - .github/workflows/rules-audit.yml
+      - .github/workflows/claude.yml
+      - .github/workflows/issue-to-pr.yml
+      - .github/workflows/release-*.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rollout:
+    name: rollout
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: List the repositories
+        id: repos
+        run: |
+          {
+            echo "owner=$(jq -r .owner repos.json)"
+            # Every repository but this one, which runs its shared workflows from master already.
+            echo "list=$(jq -r '[.repos | keys[] | select(. != "agents")] | join(",")' repos.json)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Use the docs-sync app
+        id: app
+        # Without Actions write on them this fails: the next step warns, and the job still passes.
+        continue-on-error: true
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.DOCS_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_SYNC_APP_PRIVATE_KEY }}
+          owner: ${{ steps.repos.outputs.owner }}
+          repositories: ${{ steps.repos.outputs.list }}
+          permission-actions: write
+      - name: Warn without Actions write
+        if: steps.app.outcome == 'failure'
+        run: echo "::warning::The docs-sync app can't start workflows in the other repositories (it needs Actions write), so they'll pick this up on their own schedule."
+      - name: Start each repository's Base rules check
+        if: steps.app.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          OWNER: ${{ steps.repos.outputs.owner }}
+          LIST: ${{ steps.repos.outputs.list }}
+        run: |
+          failed=0
+          for repo in ${LIST//,/ }; do
+            if gh workflow run check-base.yml --repo "$OWNER/$repo" --ref master; then
+              echo "Started $OWNER/$repo's Base rules check."
+            else
+              echo "::warning::Couldn't start $OWNER/$repo's Base rules check."
+              failed=1
+            fi
+          done
+          exit "$failed"

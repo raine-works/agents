@@ -20,4 +20,7 @@ repository runs. The base rules apply here too:
 - `needs-person.yml` (this repository's own) keeps one issue listing what's waiting on a person across every
   repository in `repos.json`: issues and pull requests labelled `needs-person`, and approved pull requests waiting to
   be merged.
+- `rollout.yml` (this repository's own) starts every repository's Base rules check when `master`'s shared workflows
+  or `base.md` change, so their syncs open the update pull requests at once rather than on their schedule. It needs the
+  docs-sync app to have Actions write.
 - `actionlint` (with shellcheck) passes on every workflow and template, and `shellcheck` on every script.
