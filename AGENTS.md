@@ -17,4 +17,7 @@ repository runs. The base rules apply here too:
 - This repository runs its own shared workflows from `master` (`@master`, never a commit): `review.yml` (Code review),
   `mention.yml` (`@claude`) and `issues.yml` (Issue to PR), with its checks (actionlint, shellcheck, jq) as their
   commands and `.github/actions/setup` installing actionlint. Claude can't edit `.github/workflows/` there either.
+- `rollout.yml` (this repository's own) starts every repository's Base rules check when `master`'s shared workflows
+  or `base.md` change, so their syncs open the update pull requests at once rather than on their schedule. It needs the
+  docs-sync app to have Actions write.
 - `actionlint` (with shellcheck) passes on every workflow and template, and `shellcheck` on every script.
