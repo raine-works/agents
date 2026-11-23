@@ -226,7 +226,9 @@ jobs:
                has them, and the docs it makes wrong updated. Run the checks (the commands you're allowed) until
                they pass. If the issue is too big for one run (many files), do a coherent part, open the pull request
                as `Part of #${{ github.event.issue.number }}` saying exactly what's left, and leave the rest for a
-               later run (step 6's `ask-person` isn't needed for that: a later audit or @claude picks it up).
+               later run. On an issue labelled `rules-audit`, the next audit picks the rest up by itself: end with
+               `comment-on-issue`. On any other, end with `ask-person '<what's left; mention @claude to continue>'`, so
+               it's listed until someone does.
             To delete a file, `${{ steps.tools.outputs.dir }}/remove <path>...` (rm and git rm aren't available).
             5. Commit and push: `${{ steps.tools.outputs.dir }}/publish '<commit message>'` (an imperative subject;
                a body saying why; end it with `Co-Authored-By: Claude <noreply@anthropic.com>`).
