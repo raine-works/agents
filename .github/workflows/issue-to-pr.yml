@@ -89,6 +89,7 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           fi
       # Picked up again (relabelled, or mentioned): it no longer waits on a person.
       - if: steps.open.outputs.run == 'true'
@@ -241,6 +242,39 @@ jobs:
             --max-turns 150
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue view ${{ github.event.issue.number }}:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/remove:*),Bash(${{ steps.tools.outputs.dir }}/open-pr:*),Bash(${{ steps.tools.outputs.dir }}/ask-person:*),Bash(${{ steps.tools.outputs.dir }}/comment-on-issue:*),${{ inputs.allowed-commands }}"
             --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
+      # Claude ends a run by opening the pull request, commenting or asking for a person, each of which leaves a
+      # pull request or a marked comment. If it stopped with neither (commands refused, turns used up, the run
+      # failing), the issue says so and waits for a person, instead of going quiet.
+      - if: always() && steps.open.outputs.run == 'true'
+        name: Make sure the issue hears back
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: claude/issue-${{ github.event.issue.number }}
+          NUMBER: ${{ github.event.issue.number }}
+          STARTED: ${{ steps.open.outputs.started }}
+          OUTCOME: ${{ steps.claude.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          pr="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+          said="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments?since=$STARTED" \
+            | jq -s --arg m "$MARKER" '[.[][] | select(.body | contains($m))] | length')"
+          if [ -n "$pr" ] || [ "${said:-0}" -gt 0 ]; then
+            echo "Claude left word: ${pr:+pull request #$pr}${pr:+ }${said:-0} comment(s)."
+            exit 0
+          fi
+          if [ "$OUTCOME" = success ]; then
+            why="Claude finished without opening a pull request or saying why (it may have been refused the commands it needed)."
+          elif [ "$OUTCOME" = skipped ]; then
+            why="The run failed before Claude started (checking out, setting up or writing its commands)."
+          else
+            why="Claude's run didn't finish ($OUTCOME)."
+          fi
+          gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body "$why Nothing was opened for this issue. See [the run]($RUN_URL); mention @claude here to try again.
+
+          $MARKER"
+          gh label create needs-person --repo "$GITHUB_REPOSITORY" --color FBCA04 --description "Waiting on a person: Claude stopped here" --force >/dev/null
+          gh issue edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --add-label needs-person >/dev/null
+          echo "::warning::Claude stopped without a pull request or a comment; told the issue and labelled it needs-person."
 
   follow-up:
     name: follow-up
