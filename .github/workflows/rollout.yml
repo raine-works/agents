@@ -18,6 +18,7 @@ on:
       - .github/workflows/rules-audit.yml
       - .github/workflows/claude.yml
       - .github/workflows/issue-to-pr.yml
+      - .github/workflows/image-pins.yml
       - .github/workflows/release-*.yml
   workflow_dispatch:
 
