@@ -149,6 +149,8 @@ jobs:
       - name: Use the docs-sync app
         id: sync-app
         if: steps.pins.outputs.latest != ''
+        # Without the Workflows permission this fails: the next step warns, and the job still passes.
+        continue-on-error: true
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.DOCS_SYNC_APP_CLIENT_ID }}
@@ -157,7 +159,7 @@ jobs:
           permission-pull-requests: write
           permission-workflows: write
       - name: Warn without Workflows write
-        if: failure() && steps.sync-app.outcome == 'failure'
+        if: steps.sync-app.outcome == 'failure'
         run: echo "::warning::The shared workflows changed in raine-works/agents, but the docs-sync app can't change workflow files here (it needs the Workflows write permission), so their pins weren't moved."
       - name: Open the workflows pull request
         if: steps.sync-app.outcome == 'success'

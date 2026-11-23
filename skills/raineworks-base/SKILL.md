@@ -87,8 +87,8 @@ repository keeps only a short caller for each, from `templates/workflows/` besid
    `raine-works/agents`: `gh api repos/raine-works/agents/commits/master --jq .sha`. Change nothing else but the
    inputs and, in `docs-sync.yml` and `rules-audit.yml`, the name of the workflow they follow.
 2. **The workflow they follow** is the one that tests a push to `master` (its `name:`, e.g. `Test`, `CI`). Set it in
-   both callers' `workflow_run.workflows`. If the repository has none, use `push: branches: [master]` in its place in
-   `docs-sync.yml`, and drop `workflow_run` from `rules-audit.yml` (it still runs weekly).
+   both callers' `workflow_run.workflows`. If the repository has none, both follow `Base rules` instead (the Base rules check
+   runs on every push to `master`; Claude's action doesn't take `push` events).
 3. **Replace any copy** of one of these workflows the repository already has (a `code-review.yml`,
    `claude-review.yml`, `docs-sync.yml`, `check-base.yml`, whatever its name: read the files) with its caller. Before
    you delete one, carry what was specific to this repository into the caller's inputs (`with:`): its review
@@ -99,7 +99,11 @@ repository keeps only a short caller for each, from `templates/workflows/` besid
    `scripts/apply-rulesets.sh <repo>`, which makes them required; not before, or every pull request waits on checks
    that don't run yet. Say so in the pull request.
 
-Two more aren't required, and the Base rules check doesn't ask for them. `claude.yml` calls the shared @claude
+Three more aren't required, and the Base rules check doesn't ask for them. `issue-to-pr.yml` calls Issue to PR: an
+issue the owner opens (or one labelled `claude`) is worked into a pull request by Claude, which then answers the
+checks and the review until it's approved. Set its `workflow_run.workflows` to `[Code review, <the CI workflow's
+name>]` (just `[Code review]` without CI) and `allowed-commands` to the repository's checks, and make sure the
+repository has a `claude` label (`gh label create claude --description "Claude works this issue"`). `claude.yml` calls the shared @claude
 workflow: mention `@claude` in an issue, a comment or a review and Claude answers or makes the change, as `claude[bot]`
 (the Claude GitHub App, which Code review needs too). If the repository has its own @claude workflow, replace it with
 `templates/workflows/claude.yml` the same way, carrying the commands it let Claude run into `allowed-commands` (unless
