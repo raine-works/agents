@@ -16,8 +16,8 @@
 #
 # Claude never merges, and never gets raw git or gh: it edits files, runs the repository's checks
 # (`allowed-commands`), and uses a few commands written here that can only delete tracked files (never a workflow or
-# .raineworks/), commit and push to its own branch, open its own pull request, and post on its own issue, pull request
-# and threads (as the review's are). It pushes as
+# .raineworks/), commit and push to its own branch, open its own pull request (and rewrite its description), and post
+# on its own issue, pull request and threads (as the review's are). It pushes as
 # claude[bot] (the Claude GitHub App, with the token the action signs in for), so the checks run on its commits. It
 # signs in to Anthropic with the job's OIDC token (workload identity federation): no secret.
 name: Issue to PR
@@ -343,6 +343,18 @@ jobs:
             echo '[[ $# -eq 1 && -n "$1" ]] || { echo "Usage: comment <body>" >&2; exit 2; }'
             printf 'exec gh pr comment %q --repo %q --body "$1\n\n%s round %s"\n' "$PR" "$GITHUB_REPOSITORY" "$MARKER" "$ROUND"
           } > "$TOOLS/comment"
+          # The pull request's description, replaced whole: it must still name its issue (Fixes #n, or Part of #n), so
+          # the link isn't lost.
+          issue="${BRANCH#claude/issue-}"
+          # shellcheck disable=SC2016
+          {
+            echo '#!/usr/bin/env bash'
+            echo 'set -euo pipefail'
+            echo '[[ $# -eq 1 && -n "$1" ]] || { echo "Usage: edit-description <the whole new description>" >&2; exit 2; }'
+            printf 'grep -qE %q <<<"$1" || { echo "The description must still name its issue: Fixes #%s (or Part of #%s if it no longer closes it)." >&2; exit 1; }\n' \
+              "(^|[^0-9A-Za-z])#${issue}([^0-9]|\$)" "$issue" "$issue"
+            printf 'exec gh pr edit %q --repo %q --body "$1\n\n%s"\n' "$PR" "$GITHUB_REPOSITORY" "$MARKER"
+          } > "$TOOLS/edit-description"
           # Deleting tracked files, which Edit and Write can't: only inside the repository, never a workflow or the base
           # rules' copy (as Edit and Write may not touch them). Staged here; publish commits it.
           # shellcheck disable=SC2016
@@ -397,6 +409,9 @@ jobs:
                evidence: `${{ steps.tools.outputs.dir }}/reply-to-thread <databaseId of its first comment> '<reply>'`.
                Never leave one unanswered, and never resolve one: the review resolves its own.
                To delete a file, `${{ steps.tools.outputs.dir }}/remove <path>...` (rm and git rm aren't available).
+               If the review says the description is out of date, or your fixes make it so, rewrite it whole:
+               `${{ steps.tools.outputs.dir }}/edit-description '<description>'` (it must keep `Fixes #<issue>`, or say
+               `Part of #<issue>` if the pull request no longer closes it all).
             4. Run the checks (the commands you're allowed) until they pass, then commit and push the fixes:
                `${{ steps.tools.outputs.dir }}/publish '<commit message>'` (end it with
                `Co-Authored-By: Claude <noreply@anthropic.com>`).
@@ -408,5 +423,5 @@ jobs:
           claude_args: |
             --model claude-opus-5-5
             --max-turns 150
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr view ${{ steps.state.outputs.pr }}:*),Bash(gh pr diff ${{ steps.state.outputs.pr }}:*),Bash(gh pr checks ${{ steps.state.outputs.pr }}:*),Bash(gh run view:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/remove:*),Bash(${{ steps.tools.outputs.dir }}/review-threads),Bash(${{ steps.tools.outputs.dir }}/reply-to-thread:*),Bash(${{ steps.tools.outputs.dir }}/comment:*),${{ inputs.allowed-commands }}"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr view ${{ steps.state.outputs.pr }}:*),Bash(gh pr diff ${{ steps.state.outputs.pr }}:*),Bash(gh pr checks ${{ steps.state.outputs.pr }}:*),Bash(gh run view:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/remove:*),Bash(${{ steps.tools.outputs.dir }}/review-threads),Bash(${{ steps.tools.outputs.dir }}/reply-to-thread:*),Bash(${{ steps.tools.outputs.dir }}/comment:*),Bash(${{ steps.tools.outputs.dir }}/edit-description:*),${{ inputs.allowed-commands }}"
             --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
