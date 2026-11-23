@@ -1,0 +1,26 @@
+# Docs sync: raine-works/agents' reusable workflow. Once CI passes on master, Claude checks whether what's new made any
+# doc wrong and, if so, opens (or updates) the `claude/docs-sync` pull request fixing them, as the docs-sync GitHub App
+# (the DOCS_SYNC_APP_CLIENT_ID variable and DOCS_SYNC_APP_PRIVATE_KEY secret).
+name: Docs sync
+
+on:
+  # After CI on master: the name of the repository's workflow that tests a push. Without one, `push: branches: [master]`.
+  workflow_run:
+    workflows: [__CI__]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs-sync:
+    uses: raine-works/agents/.github/workflows/docs-sync.yml@master
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+      actions: read
+    secrets:
+      DOCS_SYNC_APP_PRIVATE_KEY: ${{ secrets.DOCS_SYNC_APP_PRIVATE_KEY }}

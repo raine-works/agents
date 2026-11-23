@@ -1,0 +1,42 @@
+# When the shared rules change, opens (or updates) a pull request in every repository in repos.json bringing its
+# AGENTS.md up to date (scripts/sync.sh), as the docs-sync GitHub App: its token reaches every repository it's
+# installed on, and its pull requests start their checks (and Claude's review) as a person's would.
+name: Sync
+
+on:
+  push:
+    branches: [master]
+    paths: [AGENTS.md, repos.json, scripts/sync.sh, scripts/shared-block.py]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: sync
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Use the docs-sync app
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.DOCS_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_SYNC_APP_PRIVATE_KEY }}
+          # Every repository the app is installed on, not only this one.
+          owner: ${{ github.repository_owner }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Sync every repository
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh auth setup-git
+          scripts/sync.sh

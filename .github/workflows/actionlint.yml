@@ -1,0 +1,28 @@
+# Lints the reusable workflows and the templates (with shellcheck, for their `run` steps) and the scripts.
+name: actionlint
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color .github/workflows/*.yml
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
+      - name: JSON
+        run: jq empty repos.json rulesets/*.json
