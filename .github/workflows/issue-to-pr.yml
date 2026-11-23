@@ -405,13 +405,15 @@ jobs:
             2. Each failed check: find out why (`gh pr checks ${{ steps.state.outputs.pr }}`, then
                `gh run view <run id> --log-failed`) and fix it.
             3. Each unresolved thread the review (`claude`) started: `${{ steps.tools.outputs.dir }}/review-threads`.
-               If the finding is right, fix it. If it's wrong, reply in its thread saying why, briefly and with the
+               If the finding is right, fix it (a fix that isn't a push, such as a rewritten description, also gets a
+               reply saying what you did). If it's wrong, reply in its thread saying why, briefly and with the
                evidence: `${{ steps.tools.outputs.dir }}/reply-to-thread <databaseId of its first comment> '<reply>'`.
                Never leave one unanswered, and never resolve one: the review resolves its own.
                To delete a file, `${{ steps.tools.outputs.dir }}/remove <path>...` (rm and git rm aren't available).
                If the review says the description is out of date, or your fixes make it so, rewrite it whole:
                `${{ steps.tools.outputs.dir }}/edit-description '<description>'` (it must keep `Fixes #<issue>`, or say
-               `Part of #<issue>` if the pull request no longer closes it all).
+               `Part of #<issue>` if the pull request no longer closes it all). Then reply in that finding's thread
+               saying so: an edit alone doesn't start the review again, a reply does.
             4. Run the checks (the commands you're allowed) until they pass, then commit and push the fixes:
                `${{ steps.tools.outputs.dir }}/publish '<commit message>'` (end it with
                `Co-Authored-By: Claude <noreply@anthropic.com>`).
