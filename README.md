@@ -122,3 +122,26 @@ protection (`gh api -X DELETE repos/raine-works/<repo>/branches/master/protectio
 | [`raineworks-base`](skills/raineworks-base/SKILL.md) | Adopts or updates the base rules in a repository. [`scripts/sync-base.sh`](skills/raineworks-base/scripts/sync-base.sh) writes the copy, or checks it with `--check`. |
 
 Change them here, through a pull request.
+
+This repository is also a Claude Code plugin marketplace (`.claude-plugin/`), named `raineworks`, whose one plugin,
+`raineworks`, carries these skills. Install it with:
+
+```sh
+/plugin marketplace add raine-works/agents
+/plugin install raineworks@raineworks
+```
+
+It has no `version`, so an install follows `master`: every merged change reaches it at the next update. For everyone in
+the organization at once, Claude Code's managed settings (the claude.ai admin console's Claude Code settings, or a
+`managed-settings.json`) register and turn it on, with updates:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "raineworks": { "source": { "source": "github", "repo": "raine-works/agents" }, "autoUpdate": true }
+  },
+  "enabledPlugins": { "raineworks@raineworks": true }
+}
+```
+
+Add a skill under `skills/<name>/SKILL.md` and the plugin picks it up; no manifest changes.
