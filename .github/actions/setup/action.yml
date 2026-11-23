@@ -1,0 +1,12 @@
+# What this repository's own Claude runs (mention.yml, issues.yml) set up before Claude works, so it can run the
+# checks: actionlint, as the actionlint workflow installs it (shellcheck and jq are on the runner).
+name: Setup
+description: actionlint, for this repository's checks
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        cd "$RUNNER_TEMP"
+        bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+        sudo mv actionlint /usr/local/bin/
