@@ -7,10 +7,11 @@
 #   repository starts nothing until then: its text steers an agent that pushes branches. Claude reads the issue and the
 #   repository's rules, then either makes the change on `claude/issue-<number>`, with tests, runs the checks, and opens
 #   a pull request that closes the issue; or, when the issue is unclear or isn't a change to make, says so on it.
-# - `follow-up`, when a workflow the caller names (its CI, and Code review) finishes on one of those pull requests:
-#   Claude fixes what failed and each finding of the review it agrees with, in a new commit, and replies in the thread
-#   of each it doesn't, the base rules' "Pull requests and code review". Code review then reviews again, answers the
-#   replies, and approves once nothing is open. After five rounds it stops and asks for a person.
+# - `follow-up`, when a workflow the caller names (its CI, and Code review) finishes on one of those pull requests (opened
+#   by Claude from `claude/issue-<number>`, never anyone else's): Claude fixes what failed and each finding of the review
+#   it agrees with, in a new commit, and replies in the thread of each it doesn't, the base rules' "Pull requests and
+#   code review". Code review then reviews again, answers the replies, and approves once nothing is open. After five
+#   rounds it stops and asks for a person.
 #
 # Claude never merges, and never gets raw git or gh: it edits files, runs the repository's checks
 # (`allowed-commands`), and uses a few commands written here that can only commit and push to its own branch, open its
@@ -175,9 +176,12 @@ jobs:
 
   follow-up:
     name: follow-up
-    # A workflow the caller names finished on a pull request from one of Issue to PR's branches.
+    # A workflow the caller names finished on a pull request from one of Issue to PR's branches: after a push, or
+    # Code review's answer to a reply (so a finding Claude argued against, and the review still holds, comes back to
+    # Claude: the two go back and forth until they agree or the rounds run out).
     if: >-
-      github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' &&
+      github.event_name == 'workflow_run' &&
+      contains(fromJSON('["pull_request", "pull_request_review_comment"]'), github.event.workflow_run.event) &&
       startsWith(github.event.workflow_run.head_branch, 'claude/issue-') &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-26.04
@@ -207,6 +211,12 @@ jobs:
         run: |
           pr="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
           [ -n "$pr" ] || { echo "No open pull request from $BRANCH."; echo "run=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          # Only Claude's own: a person's pull request on a claude/issue- branch is theirs to see through.
+          author="$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json author --jq .author.login)"
+          if [ "$author" != "app/claude" ] && [ "$author" != "claude" ]; then
+            echo "#$pr was opened by $author, not Claude: left to them."
+            echo "run=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           echo "pr=$pr" >> "$GITHUB_OUTPUT"
           checks="$(gh pr checks "$pr" --repo "$GITHUB_REPOSITORY" --json name,bucket)"
           if jq -e 'map(select(.bucket == "pending")) | length > 0' <<<"$checks" >/dev/null; then
