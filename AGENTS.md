@@ -14,4 +14,7 @@ repository runs. The base rules apply here too:
 - When `skills/raineworks-base/scripts/sync-base.sh` changes, move `SYNC_BASE_SHA` in `check-base.yml` to the commit
   that changed it, in a pull request of its own once that's merged.
 - Keep the README, the skill and the templates in step with the workflows' inputs, outputs and check names.
+- This repository runs its own shared workflows from `master` (`@master`, never a commit): `review.yml` (Code review),
+  `mention.yml` (`@claude`) and `issues.yml` (Issue to PR), with its checks (actionlint, shellcheck, jq) as their
+  commands and `.github/actions/setup` installing actionlint. Claude can't edit `.github/workflows/` there either.
 - `actionlint` (with shellcheck) passes on every workflow and template, and `shellcheck` on every script.

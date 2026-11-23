@@ -1,0 +1,16 @@
+# What this repository's own Claude runs (mention.yml, issues.yml) set up before Claude works, so it can run the
+# checks: actionlint, as the actionlint workflow installs it (shellcheck and jq are on the runner).
+name: Setup
+description: actionlint, for this repository's checks
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        # The release's archive, checked against its SHA-256 (a tag can move; this can't), as the actionlint
+        # workflow installs it
+        cd "$RUNNER_TEMP"
+        curl -sSfL -o actionlint.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+        echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  actionlint.tar.gz" | sha256sum -c -
+        tar -xzf actionlint.tar.gz actionlint
+        sudo mv actionlint /usr/local/bin/

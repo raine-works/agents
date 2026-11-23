@@ -1,0 +1,32 @@
+# This repository's own @claude: the shared Claude workflow beside this file, as master has it (like review.yml). On a
+# pull request, a mention of @claude in a comment or a review gets an answer, or a change on its branch; on an issue,
+# Issue to PR (issues.yml) answers instead.
+name: Claude
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, assigned]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+
+jobs:
+  claude:
+    name: Claude
+    # master, not a commit: like review.yml, always master's latest, which the owner reviewed.
+    uses: raine-works/agents/.github/workflows/claude.yml@master
+    secrets: inherit
+    # This repository's checks (the actionlint workflow's), with actionlint from .github/actions/setup
+    with:
+      allowed-commands: >-
+        Bash(actionlint .github/workflows/*.yml skills/raineworks-base/templates/workflows/*.yml),Bash(shellcheck scripts/*.sh skills/raineworks-base/scripts/*.sh),Bash(jq empty repos.json rulesets/*.json)
