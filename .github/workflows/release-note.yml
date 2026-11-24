@@ -234,6 +234,7 @@ jobs:
             --model claude-opus-5-5
             --max-turns 60
             --allowedTools "Read,Write(${{ steps.version.outputs.note }}),Edit(${{ steps.version.outputs.note }}),Glob,Grep${{ inputs.check-command && format(',Bash({0} {1})', inputs.check-command, steps.version.outputs.version) || '' }}"
+            --disallowedTools "Agent,Task,Workflow"
 
       - name: Write the release's note
         if: steps.where.outputs.where == 'release'
@@ -274,6 +275,7 @@ jobs:
             --model claude-opus-5-5
             --max-turns 60
             --allowedTools "Read,Write(${{ steps.tag.outputs.note }}),Edit(${{ steps.tag.outputs.note }}),Glob,Grep"
+            --disallowedTools "Agent,Task,Workflow"
 
       # Claude may write only the note, but what it ran (and its tools' bugs) mustn't reach the pull request or the
       # release: the note is the only change in the tree, or nothing more runs (the check command is master's). No

@@ -159,7 +159,7 @@ jobs:
             --model claude-opus-5-5
             --max-turns 80
             --allowedTools "Read,Glob,Grep,Edit(/*.md),Write(/*.md),Edit(/docs/**/*.md),Write(/docs/**/*.md),Edit(/**/README.md),Write(/**/README.md),Edit(/**/AGENTS.md),Write(/**/AGENTS.md)"
-            --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**)"
+            --disallowedTools "Agent,Task,Workflow,Edit(/.raineworks/**),Write(/.raineworks/**)"
       # The pull request is opened (or pushed to) as the docs-sync GitHub App (raine-works/agents' README, "Shared workflows"),
       # its token made only now, so Claude's step never had it.
       - name: Use the docs-sync app
