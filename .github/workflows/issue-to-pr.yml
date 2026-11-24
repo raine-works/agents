@@ -130,6 +130,13 @@ jobs:
             echo 'git add -A -- . ":!.raineworks"'
             echo 'git diff --cached --quiet && { echo "Nothing to commit." >&2; exit 1; }'
             echo 'git -c user.name="claude[bot]" -c user.email="claude[bot]@users.noreply.github.com" commit -q -m "$1"'
+            # Onto the base as it is now: a branch behind it would look to GitHub as if it changed whatever the base
+            # has changed since, workflows included, and pushing a workflow change needs a permission this lacks.
+            printf 'git fetch -q "https://x-access-token:${GH_TOKEN}@github.com/%s.git" %q\n' "$GITHUB_REPOSITORY" "$BASE"
+            echo 'if ! git -c user.name="claude[bot]" -c user.email="claude[bot]@users.noreply.github.com" merge -q --no-edit FETCH_HEAD; then'
+            echo '  git merge --abort'
+            echo '  echo "The base has changed in a way that conflicts with this branch: say so with ask-person." >&2; exit 1'
+            echo 'fi'
             printf 'git push -q "https://x-access-token:${GH_TOKEN}@github.com/%s.git" "HEAD:refs/heads/%s"\n' "$GITHUB_REPOSITORY" "$BRANCH"
             printf 'echo "Pushed to %s."\n' "$BRANCH"
           } > "$TOOLS/publish"
@@ -405,6 +412,7 @@ jobs:
           TOOLS: ${{ runner.temp }}/issue-to-pr-tools
           PR: ${{ steps.state.outputs.pr }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
+          BASE: ${{ github.event.repository.default_branch }}
           ROUND: ${{ steps.state.outputs.round }}
           THREADS_QUERY: >-
             query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) {
@@ -420,6 +428,13 @@ jobs:
             echo 'git add -A -- . ":!.raineworks"'
             echo 'git diff --cached --quiet && { echo "Nothing to commit." >&2; exit 1; }'
             echo 'git -c user.name="claude[bot]" -c user.email="claude[bot]@users.noreply.github.com" commit -q -m "$1"'
+            # Onto the base as it is now: a branch behind it would look to GitHub as if it changed whatever the base
+            # has changed since, workflows included, and pushing a workflow change needs a permission this lacks.
+            printf 'git fetch -q "https://x-access-token:${GH_TOKEN}@github.com/%s.git" %q\n' "$GITHUB_REPOSITORY" "$BASE"
+            echo 'if ! git -c user.name="claude[bot]" -c user.email="claude[bot]@users.noreply.github.com" merge -q --no-edit FETCH_HEAD; then'
+            echo '  git merge --abort'
+            echo '  echo "The base has changed in a way that conflicts with this branch: say so with ask-person." >&2; exit 1'
+            echo 'fi'
             printf 'git push -q "https://x-access-token:${GH_TOKEN}@github.com/%s.git" "HEAD:refs/heads/%s"\n' "$GITHUB_REPOSITORY" "$BRANCH"
             printf 'echo "Pushed to %s."\n' "$BRANCH"
           } > "$TOOLS/publish"
