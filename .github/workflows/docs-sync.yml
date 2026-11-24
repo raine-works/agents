@@ -123,6 +123,11 @@ jobs:
           # run), else just the latest commit.
           since="${OPEN_SINCE:-$(gh run list --workflow docs-sync.yml --branch master --status success --limit 1 --json headSha --jq '.[0].headSha // empty')}"
           if [ -z "$since" ] || ! git merge-base --is-ancestor "$since" "$HEAD_SHA"; then since="$HEAD_SHA~1"; fi
+          # A run started by workflow_run is stamped with master's tip when it starts, not the commit it checks: two
+          # merges in a row stamp the first run with the second's commit, so the next run's range was empty (and
+          # Claude's run failed on it). Nothing new by that count means the latest commit alone, which for a merge is
+          # what it merged.
+          if [ "$(git rev-list --count "$since..$HEAD_SHA")" = 0 ]; then since="$HEAD_SHA~1"; fi
           # Where the pull request this run opens or updates began: the open one's start, else this range's.
           echo "began=$(git rev-parse "${OPEN_BEGAN:-$since}")" >> "$GITHUB_OUTPUT"
           echo "range=$since..$HEAD_SHA" >> "$GITHUB_OUTPUT"
