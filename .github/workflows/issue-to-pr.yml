@@ -259,6 +259,23 @@ jobs:
             --max-turns 150
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue view ${{ github.event.issue.number }}:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/remove:*),Bash(${{ steps.tools.outputs.dir }}/open-pr:*),Bash(${{ steps.tools.outputs.dir }}/ask-person:*),Bash(${{ steps.tools.outputs.dir }}/comment-on-issue:*),${{ inputs.allowed-commands }}"
             --disallowedTools "Agent,Task,Workflow,Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
+      # A failed run says why, from its log: Anthropic refusing the request (a spending or rate limit, billing, the
+      # model), which the action's own output hides
+      - name: Say why Claude's run failed
+        if: failure() && steps.claude.outputs.execution_file != ''
+        env:
+          LOG: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          [ -f "$LOG" ] || exit 0
+          # The API's error kind (billing_error, rate_limit, authentication_failed…) and its message; a run that failed
+          # later only its failure (error_max_turns…), and a working run nothing: their words can hold what tools read
+          why="$(jq -r '([.[] | select(.type == "assistant") | .error // empty] | unique | join(", ")) as $api
+            | ([.[] | select(.type == "result")] | last) as $r
+            | if $r.is_error == false then empty
+              elif $api != "" or ($r.num_turns // 0) <= 1 then [$api, ($r.result // "")] | map(select(. != "")) | join(": ")
+              else $r.subtype // "" end' "$LOG" \
+            | tr '\r\n' '  ' | sed 's/^ *//; s/ *$//' | cut -c1-500 | sed 's/%/%25/g')"
+          echo "::error title=Why Claude's run failed::${why:-No reason in its log; see the Claude step}"
       # The commands Claude was refused, on the run: often why it stopped short (a check the caller's
       # allowed-commands lacks, or a variant of one with other arguments).
       - if: always() && steps.claude.outputs.execution_file != ''
@@ -572,6 +589,23 @@ jobs:
             --max-turns 150
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr view ${{ steps.state.outputs.pr }}:*),Bash(gh pr diff ${{ steps.state.outputs.pr }}:*),Bash(gh pr checks ${{ steps.state.outputs.pr }}:*),Bash(gh run view:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/remove:*),Bash(${{ steps.tools.outputs.dir }}/review-threads),Bash(${{ steps.tools.outputs.dir }}/reply-to-thread:*),Bash(${{ steps.tools.outputs.dir }}/comment:*),Bash(${{ steps.tools.outputs.dir }}/ask-person:*),Bash(${{ steps.tools.outputs.dir }}/edit-description:*),${{ inputs.allowed-commands }}"
             --disallowedTools "Agent,Task,Workflow,Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
+      # A failed run says why, from its log: Anthropic refusing the request (a spending or rate limit, billing, the
+      # model), which the action's own output hides
+      - name: Say why Claude's run failed
+        if: failure() && steps.claude.outputs.execution_file != ''
+        env:
+          LOG: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          [ -f "$LOG" ] || exit 0
+          # The API's error kind (billing_error, rate_limit, authentication_failed…) and its message; a run that failed
+          # later only its failure (error_max_turns…), and a working run nothing: their words can hold what tools read
+          why="$(jq -r '([.[] | select(.type == "assistant") | .error // empty] | unique | join(", ")) as $api
+            | ([.[] | select(.type == "result")] | last) as $r
+            | if $r.is_error == false then empty
+              elif $api != "" or ($r.num_turns // 0) <= 1 then [$api, ($r.result // "")] | map(select(. != "")) | join(": ")
+              else $r.subtype // "" end' "$LOG" \
+            | tr '\r\n' '  ' | sed 's/^ *//; s/ *$//' | cut -c1-500 | sed 's/%/%25/g')"
+          echo "::error title=Why Claude's run failed::${why:-No reason in its log; see the Claude step}"
       # The commands Claude was refused, on the run: often why it stopped short (a check the caller's
       # allowed-commands lacks, or a variant of one with other arguments).
       - if: always() && steps.claude.outputs.execution_file != ''

@@ -66,6 +66,11 @@ request that moves its pins. A caller sets its triggers, permissions and inputs,
 
 Their checks report as `<caller> / <job>`: `Base rules / check`, `Code review / review`, `Code review / approve`.
 
+When Claude's run fails, the run says why in an error annotation, "Why Claude's run failed" (Code review's own:
+"Claude's run failed"): the API's error (`billing_error`, `rate_limit`, `authentication_failed`…) and its message,
+which the action's output hides. A run that failed later names only its failure (`error_max_turns`), and a working
+run nothing, since their words can hold what Claude's tools read.
+
 What they need, set once per repository:
 
 - **The Claude GitHub App** ([github.com/apps/claude](https://github.com/apps/claude)), installed on every repository

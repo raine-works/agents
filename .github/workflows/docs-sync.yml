@@ -127,6 +127,7 @@ jobs:
           echo "began=$(git rev-parse "${OPEN_BEGAN:-$since}")" >> "$GITHUB_OUTPUT"
           echo "range=$since..$HEAD_SHA" >> "$GITHUB_OUTPUT"
       - uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
+        id: claude
         with:
           # Workload identity federation: the job's GitHub OIDC token (id-token: write) is exchanged for a
           # short-lived Anthropic one. These are identifiers, not secrets.
@@ -163,6 +164,23 @@ jobs:
             --max-turns 80
             --allowedTools "Read,Glob,Grep,Edit(/*.md),Write(/*.md),Edit(/docs/**/*.md),Write(/docs/**/*.md),Edit(/**/README.md),Write(/**/README.md),Edit(/**/AGENTS.md),Write(/**/AGENTS.md)"
             --disallowedTools "Agent,Task,Workflow,Edit(/.raineworks/**),Write(/.raineworks/**)"
+      # A failed run says why, from its log: Anthropic refusing the request (a spending or rate limit, billing, the
+      # model), which the action's own output hides
+      - name: Say why Claude's run failed
+        if: failure() && steps.claude.outputs.execution_file != ''
+        env:
+          LOG: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          [ -f "$LOG" ] || exit 0
+          # The API's error kind (billing_error, rate_limit, authentication_failed…) and its message; a run that failed
+          # later only its failure (error_max_turns…), and a working run nothing: their words can hold what tools read
+          why="$(jq -r '([.[] | select(.type == "assistant") | .error // empty] | unique | join(", ")) as $api
+            | ([.[] | select(.type == "result")] | last) as $r
+            | if $r.is_error == false then empty
+              elif $api != "" or ($r.num_turns // 0) <= 1 then [$api, ($r.result // "")] | map(select(. != "")) | join(": ")
+              else $r.subtype // "" end' "$LOG" \
+            | tr '\r\n' '  ' | sed 's/^ *//; s/ *$//' | cut -c1-500 | sed 's/%/%25/g')"
+          echo "::error title=Why Claude's run failed::${why:-No reason in its log; see the Claude step}"
       # The pull request is opened (or pushed to) as the docs-sync GitHub App (raine-works/agents' README, "Shared workflows"),
       # its token made only now, so Claude's step never had it.
       - name: Use the docs-sync app
