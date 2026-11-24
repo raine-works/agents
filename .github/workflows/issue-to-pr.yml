@@ -212,6 +212,8 @@ jobs:
             search them, and in Bash only the commands named below and the repository's checks, exactly as allowed.
             Anything else in Bash (git, ls, find, grep, xargs, a pipe or a loop) is refused: don't retry it. If a
             command you need is refused, say which with `ask-person` rather than stopping.
+            Do all the work yourself in this run: there are no subagents or background tasks, and the run ends
+            when you stop, so anything left waiting is lost. Finish with one of the commands that report back.
 
             1. Read the issue and its comments: `gh issue view ${{ github.event.issue.number }} --comments`. If an
                `@claude` comment started this, it's the latest word on what to do.
@@ -249,7 +251,7 @@ jobs:
             --model claude-opus-5-5
             --max-turns 150
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh issue view ${{ github.event.issue.number }}:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/remove:*),Bash(${{ steps.tools.outputs.dir }}/open-pr:*),Bash(${{ steps.tools.outputs.dir }}/ask-person:*),Bash(${{ steps.tools.outputs.dir }}/comment-on-issue:*),${{ inputs.allowed-commands }}"
-            --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
+            --disallowedTools "Agent,Task,Workflow,Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
       # The commands Claude was refused, on the run: often why it stopped short (a check the caller's
       # allowed-commands lacks, or a variant of one with other arguments).
       - if: always() && steps.claude.outputs.execution_file != ''
@@ -520,6 +522,8 @@ jobs:
             search them, and in Bash only the commands named below and the repository's checks, exactly as allowed.
             Anything else in Bash (git, ls, find, grep, xargs, a pipe or a loop) is refused: don't retry it. If a
             command you need is refused, say which with `ask-person` rather than stopping.
+            Do all the work yourself in this run: there are no subagents or background tasks, and the run ends
+            when you stop, so anything left waiting is lost. Finish with one of the commands that report back.
 
             1. Read AGENTS.md (with .raineworks/base.md), the pull request and its issue
                (`gh pr view ${{ steps.state.outputs.pr }} --comments`), and the diff (`gh pr diff ${{ steps.state.outputs.pr }}`).
@@ -552,7 +556,7 @@ jobs:
             --model claude-opus-5-5
             --max-turns 150
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(gh pr view ${{ steps.state.outputs.pr }}:*),Bash(gh pr diff ${{ steps.state.outputs.pr }}:*),Bash(gh pr checks ${{ steps.state.outputs.pr }}:*),Bash(gh run view:*),Bash(${{ steps.tools.outputs.dir }}/publish:*),Bash(${{ steps.tools.outputs.dir }}/remove:*),Bash(${{ steps.tools.outputs.dir }}/review-threads),Bash(${{ steps.tools.outputs.dir }}/reply-to-thread:*),Bash(${{ steps.tools.outputs.dir }}/comment:*),Bash(${{ steps.tools.outputs.dir }}/ask-person:*),Bash(${{ steps.tools.outputs.dir }}/edit-description:*),${{ inputs.allowed-commands }}"
-            --disallowedTools "Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
+            --disallowedTools "Agent,Task,Workflow,Edit(/.raineworks/**),Write(/.raineworks/**),Edit(/.github/workflows/**),Write(/.github/workflows/**),Read(/${{ runner.temp }}/**),Edit(/${{ runner.temp }}/**),Write(/${{ runner.temp }}/**)"
       # The commands Claude was refused, on the run: often why it stopped short (a check the caller's
       # allowed-commands lacks, or a variant of one with other arguments).
       - if: always() && steps.claude.outputs.execution_file != ''
