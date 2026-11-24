@@ -192,6 +192,7 @@ jobs:
           echo "Writing $TAG's note (since ${previous:-the beginning})."
 
       - name: Write the note
+        id: claude_note
         if: steps.where.outputs.where == 'folder'
         uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
         with:
@@ -238,8 +239,26 @@ jobs:
             --max-turns 60
             --allowedTools "Read,Write(${{ steps.version.outputs.note }}),Edit(${{ steps.version.outputs.note }}),Glob,Grep${{ inputs.check-command && format(',Bash({0} {1})', inputs.check-command, steps.version.outputs.version) || '' }}"
             --disallowedTools "Agent,Task,Workflow"
+      # A failed run says why, from its log: Anthropic refusing the request (a spending or rate limit, billing, the
+      # model), which the action's own output hides
+      - name: Say why Claude's run failed
+        if: failure() && steps.claude_note.outputs.execution_file != ''
+        env:
+          LOG: ${{ steps.claude_note.outputs.execution_file }}
+        run: |
+          [ -f "$LOG" ] || exit 0
+          # The API's error kind (billing_error, rate_limit, authentication_failed…) and its message; a run that failed
+          # later only its failure (error_max_turns…), and a working run nothing: their words can hold what tools read
+          why="$(jq -r '([.[] | select(.type == "assistant") | .error // empty] | unique | join(", ")) as $api
+            | ([.[] | select(.type == "result")] | last) as $r
+            | if $r.is_error == false then empty
+              elif $api != "" or ($r.num_turns // 0) <= 1 then [$api, ($r.result // "")] | map(select(. != "")) | join(": ")
+              else $r.subtype // "" end' "$LOG" \
+            | tr '\r\n' '  ' | sed 's/^ *//; s/ *$//' | cut -c1-500 | sed 's/%/%25/g')"
+          echo "::error title=Why Claude's run failed::${why:-No reason in its log; see the Claude step}"
 
       - name: Write the release's note
+        id: claude_release
         if: steps.where.outputs.where == 'release'
         uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
         with:
@@ -282,6 +301,23 @@ jobs:
             --max-turns 60
             --allowedTools "Read,Write(${{ steps.tag.outputs.note }}),Edit(${{ steps.tag.outputs.note }}),Glob,Grep"
             --disallowedTools "Agent,Task,Workflow"
+      # A failed run says why, from its log: Anthropic refusing the request (a spending or rate limit, billing, the
+      # model), which the action's own output hides
+      - name: Say why Claude's run failed
+        if: failure() && steps.claude_release.outputs.execution_file != ''
+        env:
+          LOG: ${{ steps.claude_release.outputs.execution_file }}
+        run: |
+          [ -f "$LOG" ] || exit 0
+          # The API's error kind (billing_error, rate_limit, authentication_failed…) and its message; a run that failed
+          # later only its failure (error_max_turns…), and a working run nothing: their words can hold what tools read
+          why="$(jq -r '([.[] | select(.type == "assistant") | .error // empty] | unique | join(", ")) as $api
+            | ([.[] | select(.type == "result")] | last) as $r
+            | if $r.is_error == false then empty
+              elif $api != "" or ($r.num_turns // 0) <= 1 then [$api, ($r.result // "")] | map(select(. != "")) | join(": ")
+              else $r.subtype // "" end' "$LOG" \
+            | tr '\r\n' '  ' | sed 's/^ *//; s/ *$//' | cut -c1-500 | sed 's/%/%25/g')"
+          echo "::error title=Why Claude's run failed::${why:-No reason in its log; see the Claude step}"
 
       # Claude may write only the note, but what it ran (and its tools' bugs) mustn't reach the pull request or the
       # release: the note is the only change in the tree, or nothing more runs (the check command is master's). No

@@ -338,7 +338,15 @@ jobs:
           jq -r '.[] | select(.type == "result") | .permission_denials[]? |
             "::warning title=Claude was denied a tool::\(.tool_name) \(.tool_input.command // "")"' "$LOG"
           jq -e '[.[] | select(.type == "result")] | last | .is_error | not' "$LOG" > /dev/null || {
-            echo "::error title=Claude's run failed::$(jq -r '[.[] | select(.type == "result")] | last | .subtype' "$LOG")"
+            # The API's error kind (billing_error, rate_limit, authentication_failed…) and its message; a run that failed
+            # later only its failure (error_max_turns…), and a working run nothing: their words can hold what tools read
+            why="$(jq -r '([.[] | select(.type == "assistant") | .error // empty] | unique | join(", ")) as $api
+              | ([.[] | select(.type == "result")] | last) as $r
+              | if $r.is_error == false then empty
+              elif $api != "" or ($r.num_turns // 0) <= 1 then [$api, ($r.result // "")] | map(select(. != "")) | join(": ")
+              else $r.subtype // "" end' "$LOG" \
+              | tr '\r\n' '  ' | sed 's/^ *//; s/ *$//' | cut -c1-500 | sed 's/%/%25/g')"
+            echo "::error title=Claude's run failed::${why:-No reason in its log; see the Claude step}"
             exit 1
           }
           # A push's review isn't done until its summary says it reviewed this commit (a run can end
