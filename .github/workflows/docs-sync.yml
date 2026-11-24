@@ -118,16 +118,29 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           OPEN_SINCE: ${{ steps.open.outputs.since }}
           OPEN_BEGAN: ${{ steps.open.outputs.began }}
+          # The CI workflow whose success starts this one (the caller's `workflows:`), when it's what started it
+          CI_WORKFLOW: ${{ github.event.workflow_run.workflow_id }}
         run: |
-          # Where a dropped pull request began, else the commit this workflow last ran for (its previous successful
-          # run), else just the latest commit.
-          since="${OPEN_SINCE:-$(gh run list --workflow docs-sync.yml --branch master --status success --limit 1 --json headSha --jq '.[0].headSha // empty')}"
+          # Where a dropped pull request began, else the commit this workflow last checked, else just the latest commit.
+          # The last one checked isn't that run's own stamp: a run started by workflow_run is stamped with master's tip
+          # when it starts, so two merges seconds apart stamped the first run with the second's commit, and the next
+          # run's range came out empty. It's the commit CI passed on just before that run started: the latest
+          # successful CI run on master that had finished by then.
+          last="$(gh run list --workflow docs-sync.yml --branch master --status success --limit 1 --json createdAt,headSha \
+            --jq '.[0] // empty | "\(.createdAt) \(.headSha)"')"
+          started="${last%% *}"
+          checked=""
+          if [ -n "$CI_WORKFLOW" ] && [ -n "$started" ]; then
+            checked="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$CI_WORKFLOW/runs?branch=master&status=success&per_page=100" \
+              --jq "[.workflow_runs[] | select(.updated_at <= \"$started\")] | first | .head_sha // empty" || true)"
+          fi
+          since="${OPEN_SINCE:-${checked:-${last#* }}}"
           if [ -z "$since" ] || ! git merge-base --is-ancestor "$since" "$HEAD_SHA"; then since="$HEAD_SHA~1"; fi
-          # A run started by workflow_run is stamped with master's tip when it starts, not the commit it checks: two
-          # merges in a row stamp the first run with the second's commit, so the next run's range was empty (and
-          # Claude's run failed on it). Nothing new by that count means the latest commit alone, which for a merge is
-          # what it merged.
-          if [ "$(git rev-list --count "$since..$HEAD_SHA")" = 0 ]; then since="$HEAD_SHA~1"; fi
+          # Nothing new by that count (a manual run since): the latest commit alone, said so rather than an empty run
+          if [ "$(git rev-list --count "$since..$HEAD_SHA")" = 0 ]; then
+            echo "::notice title=Docs sync::Nothing new since $since: checking $HEAD_SHA alone."
+            since="$HEAD_SHA~1"
+          fi
           # Where the pull request this run opens or updates began: the open one's start, else this range's.
           echo "began=$(git rev-parse "${OPEN_BEGAN:-$since}")" >> "$GITHUB_OUTPUT"
           echo "range=$since..$HEAD_SHA" >> "$GITHUB_OUTPUT"
