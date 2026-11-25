@@ -105,7 +105,9 @@
 				"lightd",
 				"agent",
 				"integration",
-				"lint"
+				"lint",
+				"hacs",
+				"hassfest"
 			]
 		}
 	}
