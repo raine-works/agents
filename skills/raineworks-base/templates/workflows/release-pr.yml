@@ -25,3 +25,4 @@ jobs:
     #     custom_components/*/manifest.json
     #   paths: ^(custom_components|packages)/
     #   ignore: (^|/)(tests?|__tests__)/|\.test\.
+    #   changelog: CHANGELOG.md   # its "## Unreleased" heading becomes the release's "## <version>"

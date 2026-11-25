@@ -9,8 +9,9 @@
 #      counts only if it touched what ships (input `paths`, less `ignore`), and never the release pull request itself;
 #   2. the version moves by the biggest of them: major for a breaking change (`type!:` or BREAKING CHANGE), minor for a
 #      `feat`, patch for anything else;
-#   3. the pull request `Release v<version>` (branch release/next) sets that version in every file of `version-files`
-#      and lists the changes, opened or updated as the docs-sync app, so its checks run (a pull request the workflow's
+#   3. the pull request `Release v<version>` (branch release/next) sets that version in every file of `version-files`,
+#      turns the changelog's `## Unreleased` heading (input `changelog`, if it has one) into `## <version>`, and lists
+#      the changes, opened or updated as the docs-sync app, so its checks run (a pull request the workflow's
 #      own token opens starts none).
 #
 # Nothing that ships changed: no pull request (an open one is left as it is). The version on master already ahead of
@@ -40,6 +41,12 @@ on:
         description: Paths under `paths` that don't ship (tests), as an extended regular expression. Empty for none.
         type: string
         default: (^|/)(tests?|__tests__)/|\.test\.
+      changelog:
+        description: >-
+          The changelog, if the repository keeps one: its `## Unreleased` heading, where changes add their entries,
+          becomes the release's `## <version>` in the pull request. Nothing happens without the file or the heading.
+        type: string
+        default: CHANGELOG.md
       name:
         description: The project's name, for the pull request's text. Without it, the repository's name.
         type: string
@@ -66,6 +73,7 @@ jobs:
         id: next
         env:
           VERSION_FILES: ${{ inputs.version-files }}
+          CHANGELOG: ${{ inputs.changelog }}
           SHIPS: ${{ inputs.paths }}
           IGNORE: ${{ inputs.ignore }}
         run: |
@@ -124,10 +132,19 @@ jobs:
             sed -E -i "0,/\"version\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/s//\"version\": \"$next\"/" "$f"
             [[ "$(jq -r .version "$f")" == "$next" ]] || { echo "::error file=$f::Couldn't set its version to $next"; exit 1; }
           done
+          # The changelog's Unreleased entries become this version's
+          paths="$VERSION_FILES"
+          if [[ -n "$CHANGELOG" && -f "$CHANGELOG" ]] && grep -qx '## Unreleased' "$CHANGELOG"; then
+            sed -i "0,/^## Unreleased\$/s//## $next/" "$CHANGELOG"
+            paths+=$'\n'"$CHANGELOG"
+          fi
           {
             echo "release=true"
             echo "version=$next"
             echo "since=$tag"
+            echo "paths<<RELEASE_PATHS_END"
+            printf '%s\n' "$paths"
+            echo "RELEASE_PATHS_END"
             echo "notes<<RELEASE_NOTES_END"
             printf '%s' "$notes"
             echo "RELEASE_NOTES_END"
@@ -162,4 +179,4 @@ jobs:
             The version moves by the biggest change: major for a breaking one (`type!:`), minor for a `feat`, patch for anything else.
 
             🤖 Opened by Raineworks' shared release workflow (raine-works/agents, release-pr.yml)
-          add-paths: ${{ inputs.version-files }}
+          add-paths: ${{ steps.next.outputs.paths }}

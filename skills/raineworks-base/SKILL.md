@@ -132,7 +132,9 @@ Assistant integration's manifest, with its own release workflow publishing on th
 keeps one pull request, `Release v<version>`, open with the next version (major for a breaking change, `type!:`;
 minor for a `feat`; patch for anything else that ships) and what's in it, opened as the docs-sync app; merging it is
 the release. Add it to such a repository, with `paths` (and `ignore`) set to what ships and `version-files` to every
-file that carries the version, when they aren't an integration's (the defaults). A version that isn't
+file that carries the version, when they aren't an integration's (the defaults). A repository with a `CHANGELOG.md`
+adds each change's entry under `## Unreleased`, which the pull request renames to the version (`changelog` names
+another file). A version that isn't
 major.minor.patch (one that follows another project's) can't use it.
 
 What the workflows need set up once per repository (the apps, the variable and the secret, the federation rule) is in
