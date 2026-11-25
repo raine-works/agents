@@ -1,0 +1,162 @@
+# Keeps one pull request open with the next release, so cutting one is merging it: the version the merged changes
+# call for, written into the repository's version files. Merging it is the release: the repository's own release
+# workflow publishes when the version changes on master (a Home Assistant integration's release.yaml). Nothing here
+# tags or publishes, and the pull request is never merged for you: when to ship stays a person's call.
+#
+# On every push to master it reads what's been merged since the last release (the newest v* tag):
+#
+#   1. each change, a merged pull request (its title, from the merge commit) or a commit pushed or squashed onto master,
+#      counts only if it touched what ships (input `paths`, less `ignore`), and never the release pull request itself;
+#   2. the version moves by the biggest of them: major for a breaking change (`type!:` or BREAKING CHANGE), minor for a
+#      `feat`, patch for anything else;
+#   3. the pull request `Release v<version>` (branch release/next) sets that version in every file of `version-files`
+#      and lists the changes, opened or updated as the docs-sync app, so its checks run (a pull request the workflow's
+#      own token opens starts none).
+#
+# Nothing that ships changed: no pull request (an open one is left as it is). The version on master already ahead of
+# the last tag (a release merged, its tag not yet made): nothing until it's tagged.
+#
+# Raineworks' shared release pull request, called by a repository's .github/workflows/release-pr.yml (on every push to
+# master, and by hand; the raineworks-base skill's templates/workflows/release-pr.yml), which grants it contents: read.
+# Needs the docs-sync app (DOCS_SYNC_APP_CLIENT_ID, DOCS_SYNC_APP_PRIVATE_KEY), from secrets: inherit or the
+# organization.
+name: Release pull request
+
+on:
+  workflow_call:
+    inputs:
+      version-files:
+        description: >-
+          The JSON files whose top-level "version" is the project's, one per line (globs allowed). The first one found
+          is read for the current version.
+        type: string
+        default: custom_components/*/manifest.json
+      paths:
+        description: What ships, as an extended regular expression over changed paths. A change touching none of it isn't released.
+        type: string
+        default: ^custom_components/
+      ignore:
+        description: Paths under `paths` that don't ship (tests), as an extended regular expression. Empty for none.
+        type: string
+        default: (^|/)(tests?|__tests__)/|\.test\.
+      name:
+        description: The project's name, for the pull request's text. Without it, the repository's name.
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  release-pr:
+    name: release-pr
+    concurrency:
+      group: release-pr
+      cancel-in-progress: true
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Work out the next release
+        id: next
+        env:
+          VERSION_FILES: ${{ inputs.version-files }}
+          SHIPS: ${{ inputs.paths }}
+          IGNORE: ${{ inputs.ignore }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=()
+          while IFS= read -r pattern; do
+            [[ -n "$pattern" ]] || continue
+            for f in $pattern; do files+=("$f"); done
+          done <<<"$VERSION_FILES"
+          (( ${#files[@]} )) || { echo "::error::No version file matches: $VERSION_FILES"; exit 1; }
+          current="$(jq -r .version "${files[0]}")"
+          [[ "$current" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] \
+            || { echo "::error file=${files[0]}::Its version, $current, isn't major.minor.patch"; exit 1; }
+          tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
+          if [[ -n "$tag" && "v$current" != "$tag" ]]; then
+            echo "Version $current on master isn't tagged yet (last: $tag): its release comes first."
+            echo "release=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          range="${tag:+$tag..}HEAD"
+          bump=0 # 1 patch, 2 minor, 3 major
+          notes=""
+          while IFS=$'\x1f' read -r -d $'\x1e' sha subject body; do
+            sha="${sha//$'\n'/}"
+            title="$subject"
+            if [[ "$subject" =~ ^Merge\ pull\ request\ \#([0-9]+) ]]; then
+              title="$(printf '%s\n' "$body" | sed -n '/./{p;q}') (#${BASH_REMATCH[1]})"
+            fi
+            [[ "$subject" == *"/release/next"* || "$title" =~ ^Release\ v[0-9] ]] && continue
+            # Against its first parent: a merge's whole pull request (a first commit: everything in it)
+            if git rev-parse -q --verify "$sha^1" >/dev/null; then files_changed() { git diff --name-only "$sha^1" "$sha"; }
+            else files_changed() { git ls-tree -r --name-only "$sha"; }; fi
+            changed="$(files_changed | grep -E -- "$SHIPS" | { [[ -n "$IGNORE" ]] && grep -vE -- "$IGNORE" || cat; } || true)"
+            [[ -n "$changed" ]] || continue
+            level=1
+            if [[ "$title" =~ ^[a-z]+(\([^\)]*\))?!: ]] || grep -q 'BREAKING CHANGE' <<<"$body"; then level=3
+            elif [[ "$title" =~ ^feat(\([^\)]*\))?: ]]; then level=2; fi
+            (( level > bump )) && bump=$level
+            notes+="- ${title}"$'\n'
+          done < <(git log --first-parent --format='%H%x1f%s%x1f%b%x1e' "$range")
+          if (( bump == 0 )); then
+            echo "Nothing that ships changed since ${tag:-the first commit}."
+            echo "release=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          IFS=. read -r major minor patch <<<"$current"
+          if [[ -z "$tag" ]]; then next="$current"
+          elif (( bump == 3 )); then next="$((major + 1)).0.0"
+          elif (( bump == 2 )); then next="$major.$((minor + 1)).0"
+          else next="$major.$minor.$((patch + 1))"; fi
+          # Only the version line changes, keeping each file's own formatting; jq checks it took
+          for f in "${files[@]}"; do
+            sed -E -i "0,/\"version\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/s//\"version\": \"$next\"/" "$f"
+            [[ "$(jq -r .version "$f")" == "$next" ]] || { echo "::error file=$f::Couldn't set its version to $next"; exit 1; }
+          done
+          {
+            echo "release=true"
+            echo "version=$next"
+            echo "since=${tag:-the first commit}"
+            echo "notes<<RELEASE_NOTES_END"
+            printf '%s' "$notes"
+            echo "RELEASE_NOTES_END"
+          } >>"$GITHUB_OUTPUT"
+          echo "Next release: v$next (from ${tag:-nothing})"
+          git diff --stat
+      - name: Use the docs-sync app
+        if: steps.next.outputs.release == 'true'
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.DOCS_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_SYNC_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Open or update the release pull request
+        if: steps.next.outputs.release == 'true'
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
+        with:
+          token: ${{ steps.app.outputs.token }}
+          branch: release/next
+          base: master
+          delete-branch: true
+          commit-message: Release v${{ steps.next.outputs.version }}
+          title: Release v${{ steps.next.outputs.version }}
+          body: |
+            Merging this releases **${{ inputs.name || github.event.repository.name }} v${{ steps.next.outputs.version }}**: the release workflow publishes it once master's tests pass. It stays open, updated with each change merged, until you choose to ship.
+
+            What ships, since ${{ steps.next.outputs.since }}:
+
+            ${{ steps.next.outputs.notes }}
+            The version moves by the biggest change: major for a breaking one (`type!:`), minor for a `feat`, patch for anything else.
+
+            🤖 Opened by Raineworks' shared release workflow (raine-works/agents, release-pr.yml)
+          add-paths: ${{ inputs.version-files }}
