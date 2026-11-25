@@ -127,6 +127,14 @@ Whatever its old workflow told Claude about the notes (who reads them, their for
 `guide`. A repository that releases container images can also call the shared `release-plan.yml`,
 `release-images.yml` and `release-publish.yml` from its CI (`raine-works/raineworks`' `ci.yml` is the reference).
 
+`release-pr.yml` calls Release pull request, for a repository that releases when a version in a file changes (a Home
+Assistant integration's manifest, with its own release workflow publishing on that): on every push to `master` it
+keeps one pull request, `Release v<version>`, open with the next version (major for a breaking change, `type!:`;
+minor for a `feat`; patch for anything else that ships) and what's in it, opened as the docs-sync app; merging it is
+the release. Add it to such a repository, with `paths` (and `ignore`) set to what ships and `version-files` to every
+file that carries the version, when they aren't an integration's (the defaults). A version that isn't
+major.minor.patch (one that follows another project's) can't use it.
+
 What the workflows need set up once per repository (the apps, the variable and the secret, the federation rule) is in
 `raine-works/agents`' README, "Shared workflows". This step changes workflow files, so pushing it needs a token with
 the `workflow` scope.
